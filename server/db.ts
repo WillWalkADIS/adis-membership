@@ -75,6 +75,7 @@ async function migrate(): Promise<void> {
       amount_due INTEGER NOT NULL,
       payment_status TEXT NOT NULL DEFAULT 'pending',
       payment_reference TEXT,
+      payment_declared_at TEXT,
       registration_date TEXT NOT NULL,
       membership_start_date TEXT NOT NULL,
       membership_expiry_date TEXT NOT NULL,
@@ -91,6 +92,7 @@ async function migrate(): Promise<void> {
   // Columns added after the first production deploy go here. Postgres
   // supports IF NOT EXISTS on ADD COLUMN, so this is safe to re-run.
   for (const column of [
+    "payment_declared_at",
     "welcome_email_sent_at",
     "reminder_30_sent_at",
     "reminder_7_sent_at",

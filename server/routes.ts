@@ -12,11 +12,14 @@ import {
 import { runReminderSweep } from "./reminders";
 import { ADMIN_EMAIL, verifyAdminPassword, cardUrlFor } from "./config";
 
-// Cards are issued once a payment is confirmed, either by the gateway (when
-// its keys are connected) or by a committee member marking a cash/bank
-// transfer as received. Set ISSUE_CARD_ON_REGISTRATION=true to go back to
-// issuing on sign-up regardless of payment.
+// Cards are issued once a payment exists: the member has been through the
+// hosted payment link during sign-up ("declared"), or a committee member has
+// recorded a cash/bank transfer ("paid"). Set ISSUE_CARD_ON_REGISTRATION=true
+// to issue on sign-up regardless of payment.
 const ISSUE_CARD_ON_REGISTRATION = process.env.ISSUE_CARD_ON_REGISTRATION === "true";
+
+// Statuses that count as an active membership.
+const ACTIVE_PAYMENT_STATUSES = ["paid", "declared"];
 
 // The OTP secret must never leave the server, not even to the authenticated
 // committee admin dashboard — it is the literal key that generates a valid
@@ -126,7 +129,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     let cardEmailSent = false;
-    if (ISSUE_CARD_ON_REGISTRATION) {
+    if (ISSUE_CARD_ON_REGISTRATION || ACTIVE_PAYMENT_STATUSES.includes(registration.paymentStatus)) {
       cardEmailSent = await issueCard(registration);
     }
 
@@ -273,14 +276,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const existing = await storage.getRegistration(id);
     if (!existing) return res.status(404).json({ message: "Not found" });
 
+    // Keep whatever reference the member gave at sign-up when confirming a
+    // payment-link registration; only invent one for cash/bank transfers.
     const paymentReference =
       typeof req.body?.paymentReference === "string" && req.body.paymentReference.trim()
         ? req.body.paymentReference.trim()
-        : `MANUAL-${Date.now().toString(36).toUpperCase()}`;
+        : existing.paymentReference || `MANUAL-${Date.now().toString(36).toUpperCase()}`;
     const updated = await storage.markPaid(id, paymentReference);
 
+    // Only email a card if they did not already get one (e.g. a cash payment
+    // being recorded for the first time), so confirming a payment-link member
+    // does not send them a duplicate.
     let cardEmailSent = false;
-    if (updated && existing.paymentStatus !== "paid") {
+    if (updated && !existing.cardEmailSentAt) {
       cardEmailSent = await issueCard(updated);
     }
 

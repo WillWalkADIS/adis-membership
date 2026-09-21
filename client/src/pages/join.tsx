@@ -2,7 +2,19 @@ import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "wouter";
-import { CheckCircle2, Plus, Trash2, Users, User, ShieldCheck, ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Plus,
+  Trash2,
+  Users,
+  User,
+  ShieldCheck,
+  ArrowLeft,
+  ArrowRight,
+  Loader2,
+  CreditCard,
+  ExternalLink,
+} from "lucide-react";
 
 import { AdisLogo } from "@/components/adis-logo";
 import { Button } from "@/components/ui/button";
@@ -24,10 +36,11 @@ import {
   joinFormSchema,
   EMIRATES,
   MEMBERSHIP_FEES,
+  PAYMENT_LINKS,
   type JoinFormValues,
 } from "@/lib/form-schema";
 
-const STEPS = ["Membership", "Your Details", "Family", "Preferences", "Review & Pay"];
+const STEPS = ["Membership", "Payment", "Your Details", "Family", "Preferences", "Review"];
 
 type SuccessInfo = {
   membershipNumber: string;
@@ -66,6 +79,8 @@ export default function Join() {
       receiveMarketing: false,
       consentTerms: false,
       consentPrivacy: false,
+      paymentConfirmed: false,
+      paymentReference: "",
     },
     mode: "onTouched",
   });
@@ -87,6 +102,7 @@ export default function Join() {
   async function goNext() {
     const fieldsByStep: Record<string, (keyof JoinFormValues)[]> = {
       Membership: ["membershipType"],
+      Payment: ["paymentConfirmed"],
       "Your Details": [
         "primaryFullName",
         "primaryEmail",
@@ -116,6 +132,8 @@ export default function Join() {
       const payload = {
         ...values,
         amountDue: MEMBERSHIP_FEES[values.membershipType],
+        paymentDeclared: values.paymentConfirmed,
+        paymentReference: values.paymentReference || undefined,
         children: isFamily ? values.children : [],
         secondAdultFirstName: isFamily ? values.secondAdultFirstName : "",
         secondAdultSurname: isFamily ? values.secondAdultSurname : "",
@@ -191,6 +209,9 @@ export default function Join() {
               {currentStepLabel === "Membership" && (
                 <MembershipStep form={form} />
               )}
+              {currentStepLabel === "Payment" && (
+                <PaymentStep form={form} membershipType={membershipType} amountDue={amountDue} />
+              )}
               {currentStepLabel === "Your Details" && (
                 <PrimaryDetailsStep form={form} />
               )}
@@ -205,7 +226,7 @@ export default function Join() {
               {currentStepLabel === "Preferences" && (
                 <PreferencesStep form={form} />
               )}
-              {currentStepLabel === "Review & Pay" && (
+              {currentStepLabel === "Review" && (
                 <ReviewStep form={form} isFamily={isFamily} amountDue={amountDue} />
               )}
 
@@ -237,7 +258,7 @@ export default function Join() {
                         Processing...
                       </>
                     ) : (
-                      "JOIN ADIS & PAY MEMBERSHIP"
+                      "COMPLETE MY MEMBERSHIP"
                     )}
                   </Button>
                 )}
@@ -341,6 +362,104 @@ function MembershipStep({ form }: { form: ReturnType<typeof useForm<JoinFormValu
       {form.formState.errors.membershipType && (
         <p className="text-sm text-destructive" data-testid="error-membership-type">
           {form.formState.errors.membershipType.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PaymentStep({
+  form,
+  membershipType,
+  amountDue,
+}: {
+  form: ReturnType<typeof useForm<JoinFormValues>>;
+  membershipType: "single" | "family" | undefined;
+  amountDue: number;
+}) {
+  const [opened, setOpened] = useState(false);
+  const confirmed = form.watch("paymentConfirmed");
+  const link = membershipType ? PAYMENT_LINKS[membershipType] : undefined;
+  const typeLabel = membershipType === "family" ? "Family Membership" : "Single Membership";
+
+  return (
+    <div className="space-y-5">
+      <StepHeading
+        title="Pay Your Membership Fee"
+        description="Payment is taken securely by PRJCT Abu Dhabi on behalf of ADIS. Once it's done, come back to this page to finish your registration."
+      />
+
+      <div className="rounded-lg border border-border bg-accent/40 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">{typeLabel}</span>
+          <span className="text-lg font-semibold font-serif text-primary" data-testid="text-payment-amount">
+            AED {amountDue}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setOpened(true)}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          data-testid="link-payment"
+        >
+          <CreditCard className="h-4 w-4" />
+          Pay AED {amountDue} now
+          <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+        </a>
+        <p className="text-xs text-muted-foreground">
+          Opens in a new tab. Card, Apple&nbsp;Pay, Google&nbsp;Pay and PayPal are accepted. Leave this
+          page open — you'll come back to it.
+        </p>
+      </div>
+
+      <div className="space-y-4 rounded-lg border border-border p-4">
+        <label
+          className="flex cursor-pointer items-start gap-3"
+          data-testid="label-payment-confirmed"
+        >
+          <Checkbox
+            checked={confirmed}
+            onCheckedChange={(v) =>
+              form.setValue("paymentConfirmed", Boolean(v), { shouldValidate: true })
+            }
+            data-testid="checkbox-payment-confirmed"
+          />
+          <span className="text-sm text-foreground">
+            I have completed my payment of AED {amountDue}
+          </span>
+        </label>
+
+        {form.formState.errors.paymentConfirmed && (
+          <p className="text-sm text-destructive" data-testid="error-payment-confirmed">
+            {form.formState.errors.paymentConfirmed.message}
+          </p>
+        )}
+
+        <Field
+          label="Payment reference (optional)"
+          htmlFor="payment-reference"
+          error={form.formState.errors.paymentReference?.message}
+        >
+          <Input
+            id="payment-reference"
+            {...form.register("paymentReference")}
+            placeholder="e.g. the receipt number shown after paying"
+            data-testid="input-payment-reference"
+          />
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          Adding this helps the committee match your payment quickly, but you can leave it blank.
+        </p>
+      </div>
+
+      {opened && !confirmed && (
+        <p className="text-xs text-muted-foreground" data-testid="text-payment-hint">
+          Finished paying? Tick the box above and continue.
         </p>
       )}
     </div>
@@ -696,7 +815,7 @@ function ReviewStep({
   const values = form.watch();
   return (
     <div className="space-y-6">
-      <StepHeading title="Review & Pay" description="Please confirm your details before completing payment." />
+      <StepHeading title="Review & Submit" description="Please check your details, then submit to receive your membership card." />
 
       <div className="rounded-lg border border-border p-4 text-sm">
         <dl className="grid gap-2 sm:grid-cols-2">
@@ -724,29 +843,31 @@ function ReviewStep({
           <span className="font-medium text-foreground">AED {amountDue}</span>
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-primary/20 pt-2">
-          <span className="font-medium text-foreground">Total due</span>
+          <span className="font-medium text-foreground">Total paid</span>
           <span className="text-lg font-semibold font-serif text-primary" data-testid="text-total-due">
             AED {amountDue}
           </span>
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-xs text-muted-foreground">Accepted payment methods</p>
-        <div className="flex flex-wrap gap-2">
-          {["Visa", "Mastercard", "Apple Pay", "Google Pay"].map((m) => (
-            <span
-              key={m}
-              className="rounded-md border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground"
-            >
-              {m}
-            </span>
-          ))}
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Payment</span>
+          <span className="flex items-center gap-1.5 font-medium text-primary" data-testid="text-payment-confirmed">
+            <CheckCircle2 className="h-4 w-4" />
+            Completed
+          </span>
         </div>
+        {values.paymentReference ? (
+          <div className="mt-2 flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Reference</span>
+            <span className="text-foreground">{values.paymentReference}</span>
+          </div>
+        ) : null}
         <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          Card processing is being connected — ADIS never stores your card details. Your registration is reserved
-          now and the committee will confirm once secure online payment is live.
+          Payment is handled by PRJCT Abu Dhabi on behalf of ADIS — neither ADIS nor this website ever
+          sees or stores your card details. Submit to receive your membership card by email.
         </p>
       </div>
     </div>
@@ -781,7 +902,7 @@ function SuccessScreen({ info }: { info: SuccessInfo }) {
             <Row label="Membership number" value={info.membershipNumber} />
             <Row label="Member" value={info.primaryFullName} />
             <Row label="Membership type" value={info.membershipType === "family" ? "Family" : "Single"} />
-            <Row label="Amount due" value={`AED ${info.amountDue}`} />
+            <Row label="Amount paid" value={`AED ${info.amountDue}`} />
             <Row label="Membership expires" value={expiry.toLocaleDateString("en-GB")} />
           </div>
           <p className="mt-6 text-sm text-muted-foreground">

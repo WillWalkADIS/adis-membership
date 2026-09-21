@@ -14,7 +14,7 @@ interface CardData {
   primaryFullName: string;
   membershipNumber: string;
   membershipType: "single" | "family";
-  paymentStatus: "pending" | "paid" | "failed";
+  paymentStatus: "pending" | "declared" | "paid" | "failed";
   membershipStartDate: string;
   membershipExpiryDate: string;
   otpCode: string;
@@ -81,11 +81,10 @@ export default function MembershipCard() {
   // An expired membership must look expired and stop offering a QR code, so a
   // lapsed member is never turned away at the door by a card that looked fine.
   const hasExpired = new Date(data.membershipExpiryDate).getTime() < now;
-  const statusLabel = hasExpired
-    ? "Expired"
-    : data.paymentStatus === "paid"
-      ? "Active"
-      : "Pending payment";
+  // "declared" means the member paid through the payment link and the
+  // committee has not reconciled it yet — the membership is active either way.
+  const isActive = data.paymentStatus === "paid" || data.paymentStatus === "declared";
+  const statusLabel = hasExpired ? "Expired" : isActive ? "Active" : "Pending payment";
 
   return (
     <div className="min-h-dvh bg-background flex items-center justify-center px-4 py-10">
@@ -94,7 +93,7 @@ export default function MembershipCard() {
           <div className="flex items-center justify-between">
             <AdisLogo className="h-9 w-auto rounded bg-white/90 p-1" />
             <Badge
-              variant={data.paymentStatus === "paid" && !hasExpired ? "default" : "secondary"}
+              variant={isActive && !hasExpired ? "default" : "secondary"}
               className="bg-white/15 text-primary-foreground border-white/20"
               data-testid="badge-card-payment-status"
             >

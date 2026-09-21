@@ -163,7 +163,8 @@ export async function sendRegistrationReceivedEmail(params: {
 }): Promise<void> {
   const { to, name, membershipNumber, membershipType, amountDue, paymentStatus } = params;
   const typeLabel = typeLabelFor(membershipType);
-  const awaitingPayment = paymentStatus !== "paid";
+  // "declared" = paid through the hosted payment link, awaiting reconciliation.
+  const awaitingPayment = paymentStatus !== "paid" && paymentStatus !== "declared";
 
   const subject = `We've received your ADIS membership registration — ${membershipNumber}`;
 

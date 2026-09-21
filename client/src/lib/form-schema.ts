@@ -33,8 +33,17 @@ export const joinFormSchema = z
     joinWhatsappCommunity: z.boolean(),
     receiveMarketing: z.boolean(),
 
-    consentTerms: z.boolean(),
-    consentPrivacy: z.boolean(),
+    consentTerms: z.boolean().refine((v) => v === true, {
+      message: "You must confirm the membership terms and conditions",
+    }),
+    consentPrivacy: z.boolean().refine((v) => v === true, {
+      message: "You must consent to the privacy policy",
+    }),
+
+    paymentConfirmed: z.boolean().refine((v) => v === true, {
+      message: "Please complete your payment, then tick the box to confirm",
+    }),
+    paymentReference: z.string().max(120).optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.membershipType === "family") {
@@ -53,20 +62,6 @@ export const joinFormSchema = z
         });
       }
     }
-    if (!data.consentTerms) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "You must confirm the membership terms and conditions",
-        path: ["consentTerms"],
-      });
-    }
-    if (!data.consentPrivacy) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "You must consent to the privacy policy",
-        path: ["consentPrivacy"],
-      });
-    }
   });
 
 export type JoinFormValues = z.infer<typeof joinFormSchema>;
@@ -84,4 +79,11 @@ export const EMIRATES = [
 export const MEMBERSHIP_FEES: Record<"single" | "family", number> = {
   single: 100,
   family: 200,
+};
+
+// Hosted payment pages provided by PRJCT Abu Dhabi. Each link is pre-set to
+// the right fee, so the member never types an amount.
+export const PAYMENT_LINKS: Record<"single" | "family", string> = {
+  single: "https://pmnnt.co/c/bp0chzwg",
+  family: "https://pmnnt.co/c/brExptC2",
 };

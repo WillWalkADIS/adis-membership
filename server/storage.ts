@@ -5,7 +5,7 @@ import type {
   RegistrationWithChildren,
   ReminderKind,
 } from "@shared/schema";
-import { desc, eq, sql, and, isNull, gte, lte, lt } from "drizzle-orm";
+import { desc, eq, sql, and, isNull, gte, lte, lt, inArray } from "drizzle-orm";
 import { getDb } from "./db";
 import { generateCardToken, generateOtpSecret } from "./otp";
 
@@ -61,7 +61,7 @@ export class DatabaseStorage implements IStorage {
     expiry.setFullYear(expiry.getFullYear() + 1);
     const membershipExpiryDate = expiry.toISOString();
 
-    const { children, ...rest } = data;
+    const { children, paymentDeclared, paymentReference, ...rest } = data;
 
     const [row] = await db
       .insert(registrations)
@@ -69,7 +69,11 @@ export class DatabaseStorage implements IStorage {
         ...rest,
         membershipNumber,
         childrenJson: JSON.stringify(children ?? []),
-        paymentStatus: "pending",
+        // A member who has been through the payment link is active immediately;
+        // the committee still confirms it against the payment dashboard.
+        paymentStatus: paymentDeclared ? "declared" : "pending",
+        paymentReference: paymentReference?.trim() || null,
+        paymentDeclaredAt: paymentDeclared ? now.toISOString() : null,
         registrationDate,
         membershipStartDate,
         membershipExpiryDate,
@@ -127,7 +131,9 @@ export class DatabaseStorage implements IStorage {
     };
 
     const notYetSent = isNull(reminderColumn[kind]);
-    const paid = eq(registrations.paymentStatus, "paid");
+    // Active members only: someone who never paid gets the sign-up flow, not a
+    // renewal nudge.
+    const paid = inArray(registrations.paymentStatus, ["paid", "declared"]);
 
     let window;
     if (kind === "reminder30") {

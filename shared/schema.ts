@@ -31,8 +31,14 @@ export const registrations = pgTable("registrations", {
   consentPrivacy: boolean("consent_privacy").notNull().default(false),
 
   amountDue: integer("amount_due").notNull(),
-  paymentStatus: text("payment_status").notNull().default("pending"), // "pending" | "paid" | "failed"
+  // "pending"  – no payment recorded
+  // "declared" – member says they paid through the payment link; membership is
+  //              active and the card is issued, awaiting committee reconciliation
+  // "paid"     – a committee member has matched it to the payment dashboard
+  // "failed"   – payment could not be found
+  paymentStatus: text("payment_status").notNull().default("pending"),
   paymentReference: text("payment_reference"),
+  paymentDeclaredAt: text("payment_declared_at"),
 
   registrationDate: text("registration_date").notNull(),
   membershipStartDate: text("membership_start_date").notNull(),
@@ -73,6 +79,7 @@ export const insertRegistrationSchema = createInsertSchema(registrations)
     cardToken: true,
     otpSecret: true,
     cardEmailSentAt: true,
+    paymentDeclaredAt: true,
     welcomeEmailSentAt: true,
     reminder30SentAt: true,
     reminder7SentAt: true,
@@ -80,6 +87,11 @@ export const insertRegistrationSchema = createInsertSchema(registrations)
   })
   .extend({
     children: z.array(childSchema).default([]),
+    // Set when the member has been through the hosted payment link before
+    // submitting the form. The reference is whatever receipt number the
+    // payment page gave them, used by the committee to reconcile.
+    paymentDeclared: z.boolean().default(false),
+    paymentReference: z.string().max(120).optional(),
   });
 
 export type InsertRegistration = z.infer<typeof insertRegistrationSchema>;

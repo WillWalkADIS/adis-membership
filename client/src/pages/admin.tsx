@@ -110,7 +110,7 @@ interface RegistrationRow {
   children: { firstName: string; surname: string; dob: string }[];
   memberStatus: "new" | "renewal";
   amountDue: number;
-  paymentStatus: "pending" | "paid" | "failed";
+  paymentStatus: "pending" | "declared" | "paid" | "failed";
   paymentReference: string | null;
   registrationDate: string;
   membershipExpiryDate: string;
@@ -162,7 +162,10 @@ export default function Admin() {
   const registrations = data ?? [];
   const totalMembers = registrations.length;
   const paidCount = registrations.filter((r) => r.paymentStatus === "paid").length;
-  const pendingCount = totalMembers - paidCount;
+  // Paid through the payment link, not yet matched against the payment
+  // dashboard by a committee member.
+  const toVerifyCount = registrations.filter((r) => r.paymentStatus === "declared").length;
+  const pendingCount = totalMembers - paidCount - toVerifyCount;
 
   if (isCheckingSession) {
     return (
@@ -224,10 +227,11 @@ export default function Admin() {
           </a>
         </div>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard icon={Users} label="Total registrations" value={totalMembers} testId="stat-total" />
-          <StatCard icon={CheckCircle2} label="Paid" value={paidCount} testId="stat-paid" />
-          <StatCard icon={Clock} label="Pending payment" value={pendingCount} testId="stat-pending" />
+          <StatCard icon={CheckCircle2} label="Verified paid" value={paidCount} testId="stat-paid" />
+          <StatCard icon={Clock} label="Paid — to verify" value={toVerifyCount} testId="stat-to-verify" />
+          <StatCard icon={Clock} label="No payment yet" value={pendingCount} testId="stat-pending" />
         </div>
 
         <Card>
@@ -281,8 +285,13 @@ export default function Admin() {
                             variant={r.paymentStatus === "paid" ? "default" : "secondary"}
                             data-testid={`badge-payment-status-${r.id}`}
                           >
-                            {r.paymentStatus}
+                            {r.paymentStatus === "declared" ? "paid — to verify" : r.paymentStatus}
                           </Badge>
+                          {r.paymentReference ? (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Ref: {r.paymentReference}
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           {new Date(r.registrationDate).toLocaleDateString("en-GB")}
@@ -296,7 +305,7 @@ export default function Admin() {
                               disabled={markPaid.isPending}
                               data-testid={`button-mark-paid-${r.id}`}
                             >
-                              Mark paid
+                              {r.paymentStatus === "declared" ? "Verify payment" : "Mark paid"}
                             </Button>
                           )}
                         </TableCell>
@@ -310,8 +319,9 @@ export default function Admin() {
         </Card>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          "Mark paid" is a manual reconciliation tool for bank transfers or cash received at events — it will be
-          replaced by automatic confirmation once an online payment provider is connected.
+          "Paid — to verify" means the member paid online through the ADIS payment link during sign-up and
+          already has their membership card. Check it against the PRJCT Abu Dhabi payment dashboard and click
+          "Verify payment" to confirm. "Mark paid" is for bank transfers or cash received at events.
         </p>
       </main>
     </div>
