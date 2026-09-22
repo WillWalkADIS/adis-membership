@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { SITE_BASE_URL } from "./config";
 
 // Email transport.
 //
@@ -90,6 +91,14 @@ async function sendViaPreviewBridge(msg: Message): Promise<void> {
 async function sendEmail(msg: Message): Promise<void> {
   if (DRY_RUN) {
     console.log(`[email:dry-run] to=${msg.to} subject="${msg.subject}"`);
+    // MAIL_PREVIEW_DIR writes each dry-run email to disk so the HTML can be
+    // eyeballed in a browser before anything is sent for real.
+    if (process.env.MAIL_PREVIEW_DIR) {
+      const { writeFileSync, mkdirSync } = await import("node:fs");
+      mkdirSync(process.env.MAIL_PREVIEW_DIR, { recursive: true });
+      const slug = msg.subject.replace(/[^a-z0-9]+/gi, "-").slice(0, 60);
+      writeFileSync(`${process.env.MAIL_PREVIEW_DIR}/${slug}.html`, msg.html);
+    }
   } else if (RESEND_API_KEY) {
     await sendViaResend(msg);
   } else {
@@ -102,6 +111,30 @@ async function sendEmail(msg: Message): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const GREEN = "#12663f";
+const GOLD = "#b08a3e";
+const CREAM = "#f8f5ee";
+
+// Society links, supplied by the committee. Kept here so they can be changed in
+// one place; each can also be overridden with an environment variable.
+const LINKS = {
+  instagram: process.env.ADIS_INSTAGRAM_URL || "https://www.instagram.com/adirishsoc/",
+  facebook: process.env.ADIS_FACEBOOK_URL || "https://www.facebook.com/groups/irishinabudhabi/",
+  linkedin: process.env.ADIS_LINKEDIN_URL || "https://www.linkedin.com/in/adirishsoc/",
+  tiktok:
+    process.env.ADIS_TIKTOK_URL ||
+    "https://www.tiktok.com/@adirishsoc?_r=1&_t=ZS-992nHUPhMZA",
+  whatsapp:
+    process.env.ADIS_WHATSAPP_URL || "https://chat.whatsapp.com/Gc7WegWpdt5Gyz0lUfHRjI",
+  linktree: process.env.ADIS_LINKTREE_URL || "",
+  mccaffertys:
+    process.env.ADIS_MCCAFFERTYS_URL ||
+    "https://docs.google.com/forms/d/e/1FAIpQLSeReYDa7lLmqglquCZStRiEVRpf1fAEvH5erbT2kIFZwDxghQ/viewform",
+  volunteer: process.env.ADIS_VOLUNTEER_URL || "",
+};
+
+const PRESIDENT_NAME = process.env.ADIS_PRESIDENT_NAME || "Niamh Breen";
+const PRESIDENT_EMAIL = process.env.ADIS_PRESIDENT_EMAIL || "president@adirishsociety.ae";
+
 
 function layout(headline: string, bodyHtml: string): string {
   return `
@@ -129,6 +162,88 @@ function layout(headline: string, bodyHtml: string): string {
     </table>
   </body>
 </html>`.trim();
+}
+
+// The welcome email follows the committee's approved design: logo lockup,
+// green headings on cream, a social row, the McCafferty's discount and the
+// president's contact details.
+function welcomeLayout(bodyHtml: string): string {
+  const logoUrl = `${SITE_BASE_URL}/adis-logo.jpg`;
+  return `
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:${CREAM};">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${CREAM};">
+      <tr>
+        <td align="center" style="padding:28px 12px 40px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:620px;background:${CREAM};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#26302a;">
+            <tr>
+              <td align="center" style="padding:8px 28px 22px;">
+                <img src="${logoUrl}" width="260" alt="Abu Dhabi Irish Society" style="display:block;width:260px;max-width:78%;height:auto;border:0;" />
+                <div style="border-top:1px solid ${GREEN};margin-top:20px;"></div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 28px;">
+                ${bodyHtml}
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:26px 28px 0;">
+                <div style="border-top:1px solid ${GREEN};padding-top:14px;color:${GREEN};font-size:16px;">&#9752;</div>
+                <div style="margin-top:10px;font-size:12px;line-height:1.6;color:#79837b;">
+                  Abu Dhabi Irish Society &middot; <a href="${SITE_BASE_URL}" style="color:${GREEN};">joinadis.com</a><br/>
+                  You are receiving this because you registered for ADIS membership.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`.trim();
+}
+
+function h2(text: string): string {
+  return `<h2 style="margin:26px 0 12px;font-size:21px;line-height:1.3;font-weight:700;color:${GREEN};">${escapeHtml(text)}</h2>`;
+}
+
+function detailRow(label: string, valueHtml: string): string {
+  return `<tr>
+      <td style="padding:4px 14px 4px 0;font-size:14px;font-weight:700;color:${GREEN};white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
+      <td style="padding:4px 0;font-size:14px;color:#26302a;vertical-align:top;">${valueHtml}</td>
+    </tr>`;
+}
+
+function socialRow(): string {
+  const items: [string, string][] = [
+    ["Instagram", LINKS.instagram],
+    ["LinkedIn", LINKS.linkedin],
+    ["TikTok", LINKS.tiktok],
+    ["WhatsApp Community", LINKS.whatsapp],
+    ["Facebook", LINKS.facebook],
+  ];
+  if (LINKS.linktree) items.push(["Linktree", LINKS.linktree]);
+
+  const cells = items
+    .map(
+      ([label, href]) =>
+        `<a href="${href}" style="display:inline-block;margin:0 5px 8px 0;padding:9px 14px;background:#ffffff;border:1px solid ${GREEN};border-radius:999px;color:${GREEN};text-decoration:none;font-size:13px;font-weight:700;">${escapeHtml(label)}</a>`,
+    )
+    .join("");
+
+  return `<div style="margin:6px 0 4px;">${cells}</div>`;
+}
+
+function wideButton(href: string, label: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0;">
+      <tr>
+        <td align="center" style="background:${GREEN};border:2px solid ${GOLD};border-radius:8px;">
+          <a href="${href}" style="display:block;padding:14px 18px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.6px;">${escapeHtml(label)}</a>
+        </td>
+      </tr>
+    </table>`;
 }
 
 function button(href: string, label: string): string {
@@ -221,41 +336,99 @@ export async function sendMembershipCardEmail(params: {
   const { to, name, membershipNumber, membershipType, cardUrl, expiryDate } = params;
   const typeLabel = typeLabelFor(membershipType);
 
-  const subject = `Your ADIS digital membership card — ${membershipNumber}`;
+  const subject = `Fáilte chuig Abu Dhabi Irish Society — ${membershipNumber}`;
 
   const text = [
-    `Dia dhuit ${name},`,
+    `A Chairde,`,
     ``,
-    `Welcome to the Abu Dhabi Irish Society! Your digital membership card is ready:`,
-    cardUrl,
+    `Fáilte chuig Abu Dhabi Irish Society! Thanks for joining up.`,
     ``,
+    `We are delighted to welcome you to our community - your home away from home, right here in Abu Dhabi.`,
+    ``,
+    `MEMBERSHIP DETAILS`,
     `Membership number: ${membershipNumber}`,
     `Membership type: ${typeLabel}`,
     ...(expiryDate ? [`Valid until: ${formatDate(expiryDate)}`] : []),
+    `Your membership card: ${cardUrl}`,
     ``,
-    `Important: the QR code on your card refreshes every 5 minutes and is unique to you. Please open the link live to show your card — a screenshot or forwarded image will stop working after a few minutes and cannot be used by anyone else.`,
+    `Your membership card is unique to you and includes a personal QR code. Please show your QR code to participating discount partners to avail of exclusive member benefits (redemption rules apply).`,
     ``,
-    `Tip: save the link to your phone's home screen so it's always to hand at events.`,
+    `Please note: your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open the link live rather than sending a screenshot.`,
     ``,
-    `Slán,`,
-    `The ADIS Committee`,
+    `STAY CONNECTED`,
+    `Instagram: ${LINKS.instagram}`,
+    `LinkedIn: ${LINKS.linkedin}`,
+    `TikTok: ${LINKS.tiktok}`,
+    `WhatsApp Community: ${LINKS.whatsapp}`,
+    `Facebook: ${LINKS.facebook}`,
+    ...(LINKS.linktree ? [`Linktree: ${LINKS.linktree}`] : []),
+    ``,
+    `Activate your 20% McCafferty's discount: ${LINKS.mccaffertys}`,
+    ``,
+    `BECOME A VOLUNTEER`,
+    `Email the President to express your interest in becoming a Society volunteer: ${PRESIDENT_EMAIL}`,
+    ``,
+    `GET IN TOUCH`,
+    `We'd love to hear from you. Please reach out to our President, ${PRESIDENT_NAME}: ${PRESIDENT_EMAIL}`,
+    ``,
+    `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
+    ``,
+    `Míle buíochas,`,
+    `Abu Dhabi Irish Society Committee`,
   ].join("\n");
 
-  const html = layout(
-    `Fáilte, ${name.split(" ")[0]} — your membership card is ready`,
+  const volunteerHref = LINKS.volunteer
+    ? LINKS.volunteer
+    : `mailto:${PRESIDENT_EMAIL}?subject=${encodeURIComponent("I'd like to volunteer with ADIS")}`;
+
+  const html = welcomeLayout(
     [
-      p(`Welcome to the Abu Dhabi Irish Society. Your digital membership card is ready to use.`),
-      button(cardUrl, "View your membership card"),
-      detailTable([
-        ["Membership number", membershipNumber],
-        ["Membership type", typeLabel],
-        ...(expiryDate ? ([["Valid until", formatDate(expiryDate)]] as [string, string][]) : []),
-      ]),
+      `<p style="margin:0;font-size:16px;font-weight:700;color:${GREEN};">A Chairde,</p>`,
+      `<h1 style="margin:4px 0 6px;font-size:26px;line-height:1.25;font-weight:700;color:${GREEN};">Fáilte chuig Abu Dhabi Irish Society!</h1>`,
+      `<p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${GOLD};">Thanks for joining up.</p>`,
+      p(`We are delighted to welcome you to our community - your home away from home, right here in Abu Dhabi.`),
+
+      h2("Membership Details"),
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;">
+        ${detailRow("Membership Number:", escapeHtml(membershipNumber))}
+        ${detailRow("Membership Type:", escapeHtml(typeLabel))}
+        ${expiryDate ? detailRow("Valid Until:", escapeHtml(formatDate(expiryDate))) : ""}
+        ${detailRow(
+          "Your membership card:",
+          `<a href="${cardUrl}" style="color:${GREEN};font-weight:700;">Click here to view and download your membership card</a>`,
+        )}
+      </table>`,
       p(
-        `<strong>Important:</strong> the QR code on your card refreshes every 5 minutes and is unique to you. Open the link live to show your card — a screenshot or forwarded image stops working after a few minutes and cannot be used by anyone else.`,
+        `Your membership card is unique to you and includes a personal QR code. Please show your QR code to participating discount partners to avail of exclusive member benefits (redemption rules apply).`,
       ),
-      p(`Tip: save the link to your phone's home screen so it's always to hand at events.`),
-      p(`Slán,<br/>The ADIS Committee`),
+      p(
+        `<strong>Please note:</strong> your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open your card link live at events rather than sending a screenshot.`,
+      ),
+
+      h2("Stay connected with the Abu Dhabi Irish Society"),
+      p(`Keep up to date with our events, activities, member offers and community news by following us:`),
+      socialRow(),
+
+      `<p style="margin:20px 0 0;"><a href="${LINKS.mccaffertys}" style="color:${GREEN};font-weight:700;text-decoration:underline;">Click here to activate your 20% McCafferty's Discount</a></p>`,
+
+      wideButton(volunteerHref, "BECOME A VOLUNTEER"),
+      p(
+        `Or email the President to express your interest in becoming a Society volunteer: <a href="mailto:${PRESIDENT_EMAIL}" style="color:${GREEN};font-weight:700;">${PRESIDENT_EMAIL}</a>`,
+      ),
+
+      h2("Get in touch"),
+      p(`We'd love to hear from you. Please reach out to our President:`),
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
+        ${detailRow(
+          "President",
+          `${escapeHtml(PRESIDENT_NAME)} &nbsp;&nbsp; <a href="mailto:${PRESIDENT_EMAIL}" style="color:${GREEN};font-weight:700;">${PRESIDENT_EMAIL}</a>`,
+        )}
+      </table>`,
+      p(
+        `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
+      ),
+      `<p style="margin:18px 0 2px;font-size:16px;font-weight:700;color:${GREEN};">Míle buíochas,</p>`,
+      `<p style="margin:0;font-size:15px;font-weight:700;">Abu Dhabi Irish Society Committee</p>`,
     ].join(""),
   );
 

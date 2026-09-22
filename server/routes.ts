@@ -112,24 +112,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const registration = await storage.createRegistration(parsed.data);
 
-    // Acknowledgement email. Never block the response on it — a member who
-    // just paid should not see an error because an email provider was slow.
-    try {
-      await sendRegistrationReceivedEmail({
-        to: registration.primaryEmail,
-        name: registration.primaryFullName,
-        membershipNumber: registration.membershipNumber,
-        membershipType: registration.membershipType,
-        amountDue: registration.amountDue,
-        paymentStatus: registration.paymentStatus,
-      });
-      await storage.markWelcomeEmailSent(registration.id);
-    } catch (err) {
-      console.error("Could not send registration acknowledgement:", err);
+    // If they have already paid, the welcome email (sent with their card just
+    // below) is the acknowledgement — sending both would mean two near-identical
+    // emails in the same minute. Only people who have not paid get the separate
+    // "registration received" note.
+    const willReceiveCardNow =
+      ISSUE_CARD_ON_REGISTRATION || ACTIVE_PAYMENT_STATUSES.includes(registration.paymentStatus);
+
+    if (!willReceiveCardNow) {
+      // Never block the response on an email — a member should not see an error
+      // because an email provider was slow.
+      try {
+        await sendRegistrationReceivedEmail({
+          to: registration.primaryEmail,
+          name: registration.primaryFullName,
+          membershipNumber: registration.membershipNumber,
+          membershipType: registration.membershipType,
+          amountDue: registration.amountDue,
+          paymentStatus: registration.paymentStatus,
+        });
+        await storage.markWelcomeEmailSent(registration.id);
+      } catch (err) {
+        console.error("Could not send registration acknowledgement:", err);
+      }
     }
 
     let cardEmailSent = false;
-    if (ISSUE_CARD_ON_REGISTRATION || ACTIVE_PAYMENT_STATUSES.includes(registration.paymentStatus)) {
+    if (willReceiveCardNow) {
       cardEmailSent = await issueCard(registration);
     }
 
