@@ -125,7 +125,7 @@ const LINKS = {
     "https://www.tiktok.com/@adirishsoc?_r=1&_t=ZS-992nHUPhMZA",
   whatsapp:
     process.env.ADIS_WHATSAPP_URL || "https://chat.whatsapp.com/Gc7WegWpdt5Gyz0lUfHRjI",
-  linktree: process.env.ADIS_LINKTREE_URL || "",
+  linktree: process.env.ADIS_LINKTREE_URL || "https://linktr.ee/adirishsoc",
   mccaffertys:
     process.env.ADIS_MCCAFFERTYS_URL ||
     "https://docs.google.com/forms/d/e/1FAIpQLSeReYDa7lLmqglquCZStRiEVRpf1fAEvH5erbT2kIFZwDxghQ/viewform",
@@ -372,6 +372,8 @@ export async function sendMembershipCardEmail(params: {
     `Facebook: ${LINKS.facebook}`,
     ...(LINKS.linktree ? [`Linktree: ${LINKS.linktree}`] : []),
     ``,
+    `Sponsors and discount partners: ${LINKS.linktree}`,
+    ``,
     `Activate your 20% McCafferty's discount: ${LINKS.mccaffertys}`,
     ``,
     `BECOME A VOLUNTEER`,
@@ -413,6 +415,8 @@ export async function sendMembershipCardEmail(params: {
       p(
         `<strong>Please note:</strong> your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open your card link live at events rather than sending a screenshot.`,
       ),
+
+      `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;"><a href="${LINKS.linktree}" style="color:${GREEN};font-weight:700;text-decoration:underline;">Click the Linktree to find our sponsors and discount partners.</a></p>`,
 
       h2("Stay connected with the Abu Dhabi Irish Society"),
       p(`Keep up to date with our events, activities, member offers and community news by following us:`),
