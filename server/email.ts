@@ -217,29 +217,30 @@ function detailRow(label: string, valueHtml: string): string {
 }
 
 function socialRow(): string {
+  // [link label, href, icon file]. The label under WhatsApp is shortened to
+  // "Community" so every tile is the same width and the row stays even.
   const items: [string, string, string][] = [
     ["Instagram", LINKS.instagram, "instagram"],
     ["LinkedIn", LINKS.linkedin, "linkedin"],
     ["TikTok", LINKS.tiktok, "tiktok"],
-    ["WhatsApp Community", LINKS.whatsapp, "whatsapp"],
+    ["Community", LINKS.whatsapp, "whatsapp"],
     ["Facebook", LINKS.facebook, "facebook"],
   ];
   if (LINKS.linktree) items.push(["Linktree", LINKS.linktree, "linktree"]);
 
-  // Icon tiles with the name underneath. The label is part of the same link, so
-  // the row still works in clients that block remote images.
+  // Fixed-width cells keep the icons evenly spaced regardless of label length.
   const cells = items
     .map(
-      ([label, href, slug]) => `<td align="center" valign="top" style="padding:0 8px 6px 0;">
+      ([label, href, slug]) => `<td align="center" valign="top" width="84" style="width:84px;padding:0;">
         <a href="${href}" style="text-decoration:none;color:${GREEN};">
-          <img src="${SITE_BASE_URL}/email/${slug}.png" width="44" height="44" alt="${escapeHtml(label)}" style="display:block;margin:0 auto 6px;width:44px;height:44px;border:0;border-radius:10px;" />
+          <img src="${SITE_BASE_URL}/email/${slug}.png" width="44" height="44" alt="${escapeHtml(label)}" style="display:block;margin:0 auto 7px;width:44px;height:44px;border:0;border-radius:10px;" />
           <span style="font-size:11px;font-weight:700;color:${GREEN};text-decoration:underline;white-space:nowrap;">${escapeHtml(label)}</span>
         </a>
       </td>`,
     )
     .join("");
 
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 6px;">
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 8px;border-collapse:collapse;">
       <tr>${cells}</tr>
     </table>`;
 }
