@@ -146,6 +146,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(201).json({ ...publicRegistration, cardEmailSent });
   });
 
+  // Short, fragment-free links used in emails. Email clients often drop
+  // everything after "#", so these redirect to the in-app hash routes.
+  app.get("/c/:cardToken", (req, res) => {
+    const token = String(req.params.cardToken).replace(/[^a-zA-Z0-9]/g, "");
+    res.redirect(302, `/#/card/${token}`);
+  });
+
+  app.get("/r/:membershipNumber", (req, res) => {
+    const membershipNumber = String(req.params.membershipNumber).replace(/[^a-zA-Z0-9-]/g, "");
+    res.redirect(302, `/?renew=${encodeURIComponent(membershipNumber)}`);
+  });
+
   // Public: fetch a member's digital card by its unguessable card token.
   // Returns a fresh rotating code each time so the QR on the card page can
   // refresh itself every 5 minutes.

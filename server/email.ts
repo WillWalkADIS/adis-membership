@@ -217,23 +217,31 @@ function detailRow(label: string, valueHtml: string): string {
 }
 
 function socialRow(): string {
-  const items: [string, string][] = [
-    ["Instagram", LINKS.instagram],
-    ["LinkedIn", LINKS.linkedin],
-    ["TikTok", LINKS.tiktok],
-    ["WhatsApp Community", LINKS.whatsapp],
-    ["Facebook", LINKS.facebook],
+  const items: [string, string, string][] = [
+    ["Instagram", LINKS.instagram, "instagram"],
+    ["LinkedIn", LINKS.linkedin, "linkedin"],
+    ["TikTok", LINKS.tiktok, "tiktok"],
+    ["WhatsApp Community", LINKS.whatsapp, "whatsapp"],
+    ["Facebook", LINKS.facebook, "facebook"],
   ];
-  if (LINKS.linktree) items.push(["Linktree", LINKS.linktree]);
+  if (LINKS.linktree) items.push(["Linktree", LINKS.linktree, "linktree"]);
 
+  // Icon tiles with the name underneath. The label is part of the same link, so
+  // the row still works in clients that block remote images.
   const cells = items
     .map(
-      ([label, href]) =>
-        `<a href="${href}" style="display:inline-block;margin:0 5px 8px 0;padding:9px 14px;background:#ffffff;border:1px solid ${GREEN};border-radius:999px;color:${GREEN};text-decoration:none;font-size:13px;font-weight:700;">${escapeHtml(label)}</a>`,
+      ([label, href, slug]) => `<td align="center" valign="top" style="padding:0 8px 6px 0;">
+        <a href="${href}" style="text-decoration:none;color:${GREEN};">
+          <img src="${SITE_BASE_URL}/email/${slug}.png" width="44" height="44" alt="${escapeHtml(label)}" style="display:block;margin:0 auto 6px;width:44px;height:44px;border:0;border-radius:10px;" />
+          <span style="font-size:11px;font-weight:700;color:${GREEN};text-decoration:underline;white-space:nowrap;">${escapeHtml(label)}</span>
+        </a>
+      </td>`,
     )
     .join("");
 
-  return `<div style="margin:6px 0 4px;">${cells}</div>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 6px;">
+      <tr>${cells}</tr>
+    </table>`;
 }
 
 function wideButton(href: string, label: string): string {

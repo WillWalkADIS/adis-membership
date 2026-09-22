@@ -14,12 +14,16 @@ const DEFAULT_SITE_URL = isProduction
 
 export const SITE_BASE_URL = (process.env.SITE_BASE_URL || DEFAULT_SITE_URL).replace(/\/$/, "");
 
+// Email clients (notably Outlook and some link-tracking proxies) strip the
+// "#..." fragment from URLs, which used to leave members on the home page
+// instead of their card. So emails link to a plain path that the server
+// redirects to the in-app card route.
 export function cardUrlFor(cardToken: string): string {
-  return `${SITE_BASE_URL}/#/card/${cardToken}`;
+  return `${SITE_BASE_URL}/c/${cardToken}`;
 }
 
 export function renewUrlFor(membershipNumber: string): string {
-  return `${SITE_BASE_URL}/?renew=${encodeURIComponent(membershipNumber)}`;
+  return `${SITE_BASE_URL}/r/${encodeURIComponent(membershipNumber)}`;
 }
 
 // ---------------------------------------------------------------------------
