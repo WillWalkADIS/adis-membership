@@ -110,6 +110,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .status(400)
         .json({ message: "Please enter the Order # from your payment confirmation" });
     }
+    // One payment, one membership: an Order # can only ever be used once. This
+    // also stops people re-using the receipt a single-use link shows after it
+    // has been paid.
+    if (await storage.isPaymentReferenceUsed(parsed.data.paymentReference ?? "")) {
+      return res.status(400).json({
+        message:
+          "This Order # has already been used for another membership. If you have just paid, please check the Order # on your payment confirmation or contact the ADIS committee.",
+      });
+    }
     if (parsed.data.membershipType === "family") {
       const partnerEmail = (parsed.data.secondAdultEmail ?? "").trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerEmail)) {

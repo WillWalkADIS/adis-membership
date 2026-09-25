@@ -176,9 +176,20 @@ export default function Join() {
         cardEmailSent: Boolean(registration.cardEmailSent),
       });
     } catch (err) {
+      // Show the server's reason (e.g. an Order # already used) where it helps.
+      const raw = err instanceof Error ? err.message : "";
+      let reason = "";
+      try {
+        reason = JSON.parse(raw.slice(raw.indexOf("{"))).message ?? "";
+      } catch {
+        reason = "";
+      }
+      if (/order #/i.test(reason)) {
+        form.setError("paymentReference", { message: reason });
+      }
       toast({
         title: "Something went wrong",
-        description: "We couldn't submit your registration. Please try again.",
+        description: reason || "We couldn't submit your registration. Please try again.",
         variant: "destructive",
       });
     } finally {

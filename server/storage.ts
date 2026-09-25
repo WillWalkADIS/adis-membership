@@ -145,6 +145,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(registrations.id, id));
   }
 
+  // True if another registration already used this payment Order #.
+  async isPaymentReferenceUsed(ref: string): Promise<boolean> {
+    const rows = await getDb()
+      .select({ id: registrations.id })
+      .from(registrations)
+      .where(sql`upper(trim(${registrations.paymentReference})) = ${ref.trim().toUpperCase()}`)
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async deleteRegistration(id: number): Promise<boolean> {
     const rows = await getDb().delete(registrations).where(eq(registrations.id, id)).returning({ id: registrations.id });
     return rows.length > 0;
