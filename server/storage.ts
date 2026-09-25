@@ -49,11 +49,14 @@ export class DatabaseStorage implements IStorage {
     const now = new Date();
     const year = now.getFullYear();
 
-    const countRows = await db
-      .select({ c: sql<number>`count(*)::int` })
+    // Next number is one above the highest ever used this year, not the
+    // count of rows — otherwise deleting a record would hand out a number
+    // that already belongs to someone.
+    const maxRows = await db
+      .select({ m: sql<number>`coalesce(max(cast(substring(${registrations.membershipNumber} from 11) as int)), 0)::int` })
       .from(registrations)
       .where(sql`${registrations.membershipNumber} LIKE ${`ADIS-${year}-%`}`);
-    const sequence = (countRows[0]?.c ?? 0) + 1;
+    const sequence = (maxRows[0]?.m ?? 0) + 1;
     const membershipNumber = generateMembershipNumber(year, sequence);
 
     const registrationDate = now.toISOString();
@@ -140,6 +143,11 @@ export class DatabaseStorage implements IStorage {
       .update(registrations)
       .set({ partnerWelcomeEmailSentAt: new Date().toISOString() })
       .where(eq(registrations.id, id));
+  }
+
+  async deleteRegistration(id: number): Promise<boolean> {
+    const rows = await getDb().delete(registrations).where(eq(registrations.id, id)).returning({ id: registrations.id });
+    return rows.length > 0;
   }
 
   async markCardEmailSent(id: number): Promise<void> {

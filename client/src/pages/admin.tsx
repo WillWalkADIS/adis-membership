@@ -159,6 +159,20 @@ export default function Admin() {
     },
   });
 
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/registrations/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/registrations"] });
+      toast({ title: "Registration deleted" });
+    },
+    onError: () => {
+      toast({ title: "Could not delete the registration", variant: "destructive" });
+    },
+  });
+
   const registrations = data ?? [];
   const totalMembers = registrations.length;
   const paidCount = registrations.filter((r) => r.paymentStatus === "paid").length;
@@ -308,6 +322,24 @@ export default function Admin() {
                               {r.paymentStatus === "declared" ? "Confirm paid & send card" : "Mark paid & send card"}
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-1 text-destructive"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Delete ${r.membershipNumber} (${r.primaryFullName})? This cannot be undone and their card will stop working.`,
+                                )
+                              ) {
+                                remove.mutate(r.id);
+                              }
+                            }}
+                            disabled={remove.isPending}
+                            data-testid={`button-delete-${r.id}`}
+                          >
+                            Delete
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

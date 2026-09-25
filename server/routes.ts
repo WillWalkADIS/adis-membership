@@ -226,6 +226,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true, partnerSent });
   });
 
+  // Admin: permanently remove a registration (tests, duplicates). Its card
+  // links stop working immediately.
+  app.delete("/api/registrations/:id", requireAdmin, async (req, res) => {
+    const ok = await storage.deleteRegistration(Number(req.params.id));
+    if (!ok) return res.status(404).json({ message: "Not found" });
+    res.json({ ok: true });
+  });
+
   // List all registrations (committee admin view)
   app.get("/api/registrations", requireAdmin, async (_req, res) => {
     const registrations = await storage.listRegistrations();
