@@ -40,7 +40,8 @@ import {
   type JoinFormValues,
 } from "@/lib/form-schema";
 
-const STEPS = ["Membership", "Payment", "Your Details", "Family", "Preferences", "Review"];
+// Payment is deliberately the last step, straight before the final submit.
+const STEPS = ["Membership", "Your Details", "Family", "Preferences", "Review", "Payment"];
 
 type SuccessInfo = {
   membershipNumber: string;
@@ -409,7 +410,7 @@ function PaymentStep({
     <div className="space-y-5">
       <StepHeading
         title="Pay Your Membership Fee"
-        description="Payment is taken securely by PRJCT Abu Dhabi on behalf of ADIS. Once it's done, come back to this page to finish your registration."
+        description="The last step. Payment is taken securely by PRJCT Abu Dhabi on behalf of ADIS. Once you have paid, come back to this page, tick the box and click Complete my membership."
       />
 
       <div className="rounded-lg border border-border bg-accent/40 p-4">
@@ -482,7 +483,7 @@ function PaymentStep({
 
       {opened && !confirmed && (
         <p className="text-xs text-muted-foreground" data-testid="text-payment-hint">
-          Finished paying? Tick the box above and continue.
+          Finished paying? Tick the box above, then click Complete my membership.
         </p>
       )}
     </div>
@@ -573,22 +574,6 @@ function PrimaryDetailsStep({ form }: { form: ReturnType<typeof useForm<JoinForm
           </RadioGroup>
         </Field>
 
-        <Field label="Previous ADIS member?" htmlFor="previousMember">
-          <RadioGroup
-            value={watch("previousMember") ? "yes" : "no"}
-            onValueChange={(v) => setValue("previousMember", v === "yes")}
-            className="flex gap-4 pt-1.5"
-          >
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="yes" id="previous-yes" data-testid="radio-previous-yes" />
-              Yes
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="no" id="previous-no" data-testid="radio-previous-no" />
-              No
-            </label>
-          </RadioGroup>
-        </Field>
       </div>
     </div>
   );
@@ -838,7 +823,7 @@ function ReviewStep({
   const values = form.watch();
   return (
     <div className="space-y-6">
-      <StepHeading title="Review & Submit" description="Please check your details, then submit to receive your membership card." />
+      <StepHeading title="Review Your Details" description="Please check everything is correct before you pay." />
 
       <div className="rounded-lg border border-border p-4 text-sm">
         <dl className="grid gap-2 sm:grid-cols-2">
@@ -866,33 +851,17 @@ function ReviewStep({
           <span className="font-medium text-foreground">AED {amountDue}</span>
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-primary/20 pt-2">
-          <span className="font-medium text-foreground">Total paid</span>
+          <span className="font-medium text-foreground">Total to pay</span>
           <span className="text-lg font-semibold font-serif text-primary" data-testid="text-total-due">
             AED {amountDue}
           </span>
         </div>
       </div>
 
-      <div className="rounded-lg border border-border p-4">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Payment</span>
-          <span className="flex items-center gap-1.5 font-medium text-primary" data-testid="text-payment-confirmed">
-            <CheckCircle2 className="h-4 w-4" />
-            Completed
-          </span>
-        </div>
-        {values.paymentReference ? (
-          <div className="mt-2 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Reference</span>
-            <span className="text-foreground">{values.paymentReference}</span>
-          </div>
-        ) : null}
-        <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          Payment is handled by PRJCT Abu Dhabi on behalf of ADIS — neither ADIS nor this website ever
-          sees or stores your card details. Your membership card is emailed once the committee has confirmed your payment.
-        </p>
-      </div>
+      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        Everything look right? Continue to the last step to pay your membership fee and complete your membership.
+      </p>
     </div>
   );
 }

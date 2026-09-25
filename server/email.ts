@@ -246,7 +246,7 @@ function socialRow(): string {
 }
 
 function wideButton(href: string, label: string): string {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:18px 0;">
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 12px;">
       <tr>
         <td align="center" style="background:${GREEN};border:2px solid ${GOLD};border-radius:8px;">
           <a href="${href}" style="display:block;padding:14px 18px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.6px;">${escapeHtml(label)}</a>
@@ -402,8 +402,7 @@ function buildMemberEmail(
     ``,
     `Activate your 20% McCafferty's discount: ${LINKS.mccaffertys}`,
     ``,
-    `BECOME A VOLUNTEER`,
-    `Email the President to express your interest in becoming a Society volunteer: ${PRESIDENT_EMAIL}`,
+    `Become a volunteer: ${LINKS.volunteer || `mailto:${PRESIDENT_EMAIL}`}`,
     ``,
     `GET IN TOUCH`,
     `We'd love to hear from you. Please reach out to our President, ${PRESIDENT_NAME}: ${PRESIDENT_EMAIL}`,
@@ -463,12 +462,9 @@ function buildMemberEmail(
       p(`Keep up to date with our events, activities, member offers and community news by following us:`),
       socialRow(),
 
-      `<p style="margin:20px 0 0;"><a href="${LINKS.mccaffertys}" style="color:${GREEN};font-weight:700;text-decoration:underline;">Click here to activate your 20% McCafferty's Discount</a></p>`,
-
+      `<div style="height:8px;"></div>`,
+      wideButton(LINKS.mccaffertys, "ACTIVATE YOUR 20% McCAFFERTY'S DISCOUNT"),
       wideButton(volunteerHref, "BECOME A VOLUNTEER"),
-      p(
-        `Or email the President to express your interest in becoming a Society volunteer: <a href="mailto:${PRESIDENT_EMAIL}" style="color:${GREEN};font-weight:700;">${PRESIDENT_EMAIL}</a>`,
-      ),
 
       h2("Get in touch"),
       p(`We'd love to hear from you. Please reach out to our President:`),
