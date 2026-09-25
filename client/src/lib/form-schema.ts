@@ -43,7 +43,14 @@ export const joinFormSchema = z
     paymentConfirmed: z.boolean().refine((v) => v === true, {
       message: "Please complete your payment, then tick the box to confirm",
     }),
-    paymentReference: z.string().max(120).optional().or(z.literal("")),
+    // The PRJCT "Order #" from the Payment complete screen. Compulsory so the
+    // committee can match every sign-up to a real payment.
+    paymentReference: z
+      .string()
+      .max(120)
+      .refine((v) => v.trim().length >= 4, {
+        message: "Enter the Order # shown on your PRJCT payment confirmation (e.g. 99J9Z1)",
+      }),
   })
   .superRefine((data, ctx) => {
     if (data.membershipType === "family") {

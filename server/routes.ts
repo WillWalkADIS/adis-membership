@@ -105,6 +105,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!parsed.data.consentTerms || !parsed.data.consentPrivacy) {
       return res.status(400).json({ message: "Required consents were not accepted" });
     }
+    if ((parsed.data.paymentReference ?? "").trim().length < 4) {
+      return res
+        .status(400)
+        .json({ message: "Please enter the Order # from your payment confirmation" });
+    }
     if (parsed.data.membershipType === "family") {
       const partnerEmail = (parsed.data.secondAdultEmail ?? "").trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerEmail)) {

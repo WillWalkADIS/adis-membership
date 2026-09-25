@@ -454,7 +454,7 @@ function PaymentStep({
             data-testid="checkbox-payment-confirmed"
           />
           <span className="text-sm text-foreground">
-            I have completed my payment of AED {amountDue}
+            I have paid AED {amountDue} through the payment link above and my payment showed as complete
           </span>
         </label>
 
@@ -465,19 +465,20 @@ function PaymentStep({
         )}
 
         <Field
-          label="Payment reference (optional)"
+          label="Order # from your payment confirmation"
           htmlFor="payment-reference"
           error={form.formState.errors.paymentReference?.message}
         >
           <Input
             id="payment-reference"
             {...form.register("paymentReference")}
-            placeholder="e.g. the receipt number shown after paying"
+            placeholder="e.g. 99J9Z1"
             data-testid="input-payment-reference"
           />
         </Field>
         <p className="text-xs text-muted-foreground">
-          Adding this helps the committee match your payment quickly, but you can leave it blank.
+          After paying, PRJCT shows a "Payment complete" screen with an Order # — enter it here. The committee
+          checks every Order # against the payment account before your membership card is sent.
         </p>
       </div>
 
@@ -885,22 +886,22 @@ function SuccessScreen({ info }: { info: SuccessInfo }) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent">
             <CheckCircle2 className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-xl font-semibold font-serif text-foreground">Welcome to the Abu Dhabi Irish Society!</h1>
+          <h1 className="text-xl font-semibold font-serif text-foreground">Thank you — your registration is in</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Thank you for becoming a member of the Abu Dhabi Irish Society. Your membership registration has been
-            successfully received.
+            Thank you for joining the Abu Dhabi Irish Society. The committee is now reviewing your membership.
           </p>
           <div className="mt-6 space-y-2 rounded-lg border border-border p-4 text-left text-sm">
             <Row label="Membership number" value={info.membershipNumber} />
             <Row label="Member" value={info.primaryFullName} />
             <Row label="Membership type" value={info.membershipType === "family" ? "Family" : "Single"} />
-            <Row label="Amount paid" value={`AED ${info.amountDue}`} />
+            <Row label="Membership fee" value={`AED ${info.amountDue}`} />
+            <Row label="Status" value="Under review by the committee" />
             <Row label="Membership expires" value={expiry.toLocaleDateString("en-GB")} />
           </div>
           <p className="mt-6 text-sm text-muted-foreground">
             {info.membershipType === "family"
-              ? "A welcome email is on its way to both adults. Once the committee has confirmed your payment, each of you will receive your own digital membership card by email."
-              : "A welcome email is on its way to you. Once the committee has confirmed your payment, you'll receive your digital membership card by email."}
+              ? "The committee is reviewing your membership. A welcome email is on its way to both adults, and each of you will receive your own membership card by email once your payment is confirmed."
+              : "The committee is reviewing your membership. A welcome email is on its way to you, and you will receive your membership card by email once your payment is confirmed."}
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
             You'll also receive information about upcoming events, member benefits and the ADIS community.
