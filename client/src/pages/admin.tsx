@@ -305,7 +305,7 @@ export default function Admin() {
                               disabled={markPaid.isPending}
                               data-testid={`button-mark-paid-${r.id}`}
                             >
-                              {r.paymentStatus === "declared" ? "Verify payment" : "Mark paid"}
+                              {r.paymentStatus === "declared" ? "Confirm paid & send card" : "Mark paid & send card"}
                             </Button>
                           )}
                         </TableCell>
@@ -319,9 +319,10 @@ export default function Admin() {
         </Card>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          "Paid — to verify" means the member paid online through the ADIS payment link during sign-up and
-          already has their membership card. Check it against the PRJCT Abu Dhabi payment dashboard and click
-          "Verify payment" to confirm. "Mark paid" is for bank transfers or cash received at events.
+          "Paid — to verify" means the member ticked that they paid through the payment link. Check it against
+          the PRJCT Abu Dhabi payment dashboard, then click "Confirm paid & send card". Membership cards are only
+          ever emailed at that moment — to both adults on a Family membership. Use "Mark paid & send card" for cash
+          or bank transfers.
         </p>
       </main>
     </div>

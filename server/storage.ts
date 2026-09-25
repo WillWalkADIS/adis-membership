@@ -5,8 +5,9 @@ import type {
   RegistrationWithChildren,
   ReminderKind,
 } from "@shared/schema";
-import { desc, eq, sql, and, isNull, gte, lte, lt, inArray } from "drizzle-orm";
+import { desc, eq, sql, and, or, isNull, gte, lte, lt } from "drizzle-orm";
 import { getDb } from "./db";
+import { membershipExpiryFor } from "./config";
 import { generateCardToken, generateOtpSecret } from "./otp";
 
 function generateMembershipNumber(year: number, sequence: number): string {
@@ -57,9 +58,8 @@ export class DatabaseStorage implements IStorage {
 
     const registrationDate = now.toISOString();
     const membershipStartDate = registrationDate;
-    const expiry = new Date(now);
-    expiry.setFullYear(expiry.getFullYear() + 1);
-    const membershipExpiryDate = expiry.toISOString();
+    const membershipExpiryDate = membershipExpiryFor(now);
+    const isFamily = data.membershipType === "family";
 
     const { children, paymentDeclared, paymentReference, ...rest } = data;
 
@@ -69,8 +69,7 @@ export class DatabaseStorage implements IStorage {
         ...rest,
         membershipNumber,
         childrenJson: JSON.stringify(children ?? []),
-        // A member who has been through the payment link is active immediately;
-        // the committee still confirms it against the payment dashboard.
+        // A ticked payment is only a claim until the committee confirms it.
         paymentStatus: paymentDeclared ? "declared" : "pending",
         paymentReference: paymentReference?.trim() || null,
         paymentDeclaredAt: paymentDeclared ? now.toISOString() : null,
@@ -79,6 +78,8 @@ export class DatabaseStorage implements IStorage {
         membershipExpiryDate,
         cardToken: generateCardToken(),
         otpSecret: generateOtpSecret(),
+        partnerCardToken: isFamily ? generateCardToken() : null,
+        partnerOtpSecret: isFamily ? generateOtpSecret() : null,
       })
       .returning();
 
@@ -92,6 +93,53 @@ export class DatabaseStorage implements IStorage {
       .where(eq(registrations.cardToken, cardToken))
       .limit(1);
     return row ? toWithChildren(row) : undefined;
+  }
+
+  // Looks up a card by either adult's token and says whose card it is.
+  async findCardHolder(
+    token: string,
+  ): Promise<
+    | { registration: RegistrationWithChildren; holder: "primary" | "partner"; name: string; otpSecret: string }
+    | undefined
+  > {
+    const [row] = await getDb()
+      .select()
+      .from(registrations)
+      .where(or(eq(registrations.cardToken, token), eq(registrations.partnerCardToken, token)))
+      .limit(1);
+    if (!row) return undefined;
+    const registration = toWithChildren(row);
+    if (row.partnerCardToken && row.partnerCardToken === token && row.partnerOtpSecret) {
+      const name = `${row.secondAdultFirstName ?? ""} ${row.secondAdultSurname ?? ""}`.trim();
+      return { registration, holder: "partner", name, otpSecret: row.partnerOtpSecret };
+    }
+    return { registration, holder: "primary", name: row.primaryFullName, otpSecret: row.otpSecret };
+  }
+
+  // Family registrations made before partner cards existed get one on demand.
+  async ensurePartnerCard(id: number): Promise<RegistrationWithChildren | undefined> {
+    const existing = await this.getRegistration(id);
+    if (!existing || existing.membershipType !== "family" || existing.partnerCardToken) return existing;
+    const [row] = await getDb()
+      .update(registrations)
+      .set({ partnerCardToken: generateCardToken(), partnerOtpSecret: generateOtpSecret() })
+      .where(eq(registrations.id, id))
+      .returning();
+    return row ? toWithChildren(row) : undefined;
+  }
+
+  async markPartnerCardEmailSent(id: number): Promise<void> {
+    await getDb()
+      .update(registrations)
+      .set({ partnerCardEmailSentAt: new Date().toISOString() })
+      .where(eq(registrations.id, id));
+  }
+
+  async markPartnerWelcomeEmailSent(id: number): Promise<void> {
+    await getDb()
+      .update(registrations)
+      .set({ partnerWelcomeEmailSentAt: new Date().toISOString() })
+      .where(eq(registrations.id, id));
   }
 
   async markCardEmailSent(id: number): Promise<void> {
@@ -131,9 +179,7 @@ export class DatabaseStorage implements IStorage {
     };
 
     const notYetSent = isNull(reminderColumn[kind]);
-    // Active members only: someone who never paid gets the sign-up flow, not a
-    // renewal nudge.
-    const paid = inArray(registrations.paymentStatus, ["paid", "declared"]);
+ // The committee wants every registration reminded, paid or not.
 
     let window;
     if (kind === "reminder30") {
@@ -148,7 +194,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select()
       .from(registrations)
-      .where(and(paid, notYetSent, window))
+      .where(and(notYetSent, window))
       .orderBy(registrations.membershipExpiryDate);
     return rows.map(toWithChildren);
   }

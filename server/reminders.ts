@@ -7,8 +7,8 @@ import type { ReminderKind } from "@shared/schema";
 //
 // The sweep is safe to run as often as we like: each reminder is stamped on
 // the member's row once sent, so a restart, a redeploy or a double run never
-// produces a duplicate email. Only paid members are reminded — someone who
-// never completed payment gets the sign-up flow instead, not a renewal nudge.
+// produces a duplicate email. Every registration is reminded (paid or not), and
+// on a Family membership both adults get their own copy.
 
 const KINDS: ReminderKind[] = ["reminder30", "reminder7", "reminderExpiry"];
 
@@ -39,6 +39,24 @@ export async function runReminderSweep(
           kind,
           renewUrl: renewUrlFor(member.membershipNumber),
         });
+        // Family memberships: the second adult is reminded too. A failure here
+        // is logged but does not hold back the main member's stamp.
+        if (member.membershipType === "family" && member.secondAdultEmail) {
+          try {
+            await sendRenewalReminderEmail({
+              to: member.secondAdultEmail,
+              name: `${member.secondAdultFirstName ?? ""} ${member.secondAdultSurname ?? ""}`.trim(),
+              membershipNumber: member.membershipNumber,
+              membershipType: member.membershipType,
+              expiryDate: member.membershipExpiryDate,
+              kind,
+              renewUrl: renewUrlFor(member.membershipNumber),
+            });
+            sent++;
+          } catch (err) {
+            log(`failed ${kind} (partner) for ${member.membershipNumber}: ${(err as Error).message}`);
+          }
+        }
         await storage.markReminderSent(member.id, kind);
         sent++;
       } catch (err) {

@@ -32,8 +32,8 @@ export const registrations = pgTable("registrations", {
 
   amountDue: integer("amount_due").notNull(),
   // "pending"  – no payment recorded
-  // "declared" – member says they paid through the payment link; membership is
-  //              active and the card is issued, awaiting committee reconciliation
+  // "declared" – member ticked that they paid through the payment link; awaiting
+  //              committee confirmation. No card is issued in this state.
   // "paid"     – a committee member has matched it to the payment dashboard
   // "failed"   – payment could not be found
   paymentStatus: text("payment_status").notNull().default("pending"),
@@ -50,6 +50,14 @@ export const registrations = pgTable("registrations", {
   cardToken: text("card_token").notNull().unique(),
   otpSecret: text("otp_secret").notNull(),
   cardEmailSentAt: text("card_email_sent_at"),
+
+  // Family memberships: the second adult gets their own card under the same
+  // membership number, with their own token and QR secret so both adults can
+  // be scanned in independently at the same event.
+  partnerCardToken: text("partner_card_token").unique(),
+  partnerOtpSecret: text("partner_otp_secret"),
+  partnerCardEmailSentAt: text("partner_card_email_sent_at"),
+  partnerWelcomeEmailSentAt: text("partner_welcome_email_sent_at"),
 
   // Lifecycle email bookkeeping. Each column records the ISO timestamp the
   // message was sent so a restart or a second run of the daily scheduler can
@@ -79,6 +87,10 @@ export const insertRegistrationSchema = createInsertSchema(registrations)
     cardToken: true,
     otpSecret: true,
     cardEmailSentAt: true,
+    partnerCardToken: true,
+    partnerOtpSecret: true,
+    partnerCardEmailSentAt: true,
+    partnerWelcomeEmailSentAt: true,
     paymentDeclaredAt: true,
     welcomeEmailSentAt: true,
     reminder30SentAt: true,

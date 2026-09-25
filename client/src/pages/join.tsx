@@ -111,9 +111,32 @@ export default function Join() {
         "emirate",
         "memberStatus",
       ],
-      Family: ["secondAdultFirstName", "secondAdultSurname"],
+      Family: ["secondAdultFirstName", "secondAdultSurname", "secondAdultEmail"],
       Preferences: ["communicationPreference", "consentTerms", "consentPrivacy"],
     };
+    // The family rules are checked by hand: the form-wide rules only run once
+    // every step is filled in, which would let this step be skipped.
+    if (currentStepLabel === "Family") {
+      const v = form.getValues();
+      let ok = true;
+      if (!v.secondAdultFirstName?.trim()) {
+        form.setError("secondAdultFirstName", { message: "Second adult's first name is required" });
+        ok = false;
+      }
+      if (!v.secondAdultSurname?.trim()) {
+        form.setError("secondAdultSurname", { message: "Second adult's surname is required" });
+        ok = false;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.secondAdultEmail?.trim() ?? "")) {
+        form.setError("secondAdultEmail", {
+          message: "Enter the second adult's email — they receive their own welcome email and membership card",
+        });
+        ok = false;
+      }
+      if (!ok) return;
+      setStepIndex((i) => Math.min(i + 1, visibleSteps.length - 1));
+      return;
+    }
     const fields = fieldsByStep[currentStepLabel];
     if (fields) {
       const valid = await form.trigger(fields as any);
@@ -597,24 +620,24 @@ function FamilyStep({
             <Input
               id="secondAdultFirstName"
               data-testid="input-second-adult-first-name"
-              {...register("secondAdultFirstName")}
+              {...register("secondAdultFirstName", { onChange: () => form.clearErrors("secondAdultFirstName") })}
             />
           </Field>
           <Field label="Surname" htmlFor="secondAdultSurname" error={errors.secondAdultSurname?.message}>
             <Input
               id="secondAdultSurname"
               data-testid="input-second-adult-surname"
-              {...register("secondAdultSurname")}
+              {...register("secondAdultSurname", { onChange: () => form.clearErrors("secondAdultSurname") })}
             />
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Email address" htmlFor="secondAdultEmail">
+          <Field label="Email address" htmlFor="secondAdultEmail" error={errors.secondAdultEmail?.message}>
             <Input
               id="secondAdultEmail"
               type="email"
               data-testid="input-second-adult-email"
-              {...register("secondAdultEmail")}
+              {...register("secondAdultEmail", { onChange: () => form.clearErrors("secondAdultEmail") })}
             />
           </Field>
           <Field label="Mobile number" htmlFor="secondAdultMobile">
@@ -867,7 +890,7 @@ function ReviewStep({
         <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           Payment is handled by PRJCT Abu Dhabi on behalf of ADIS — neither ADIS nor this website ever
-          sees or stores your card details. Submit to receive your membership card by email.
+          sees or stores your card details. Your membership card is emailed once the committee has confirmed your payment.
         </p>
       </div>
     </div>
@@ -906,9 +929,9 @@ function SuccessScreen({ info }: { info: SuccessInfo }) {
             <Row label="Membership expires" value={expiry.toLocaleDateString("en-GB")} />
           </div>
           <p className="mt-6 text-sm text-muted-foreground">
-            {info.cardEmailSent
-              ? "Check your email for your personal digital membership card, complete with a rotating QR code for entry to ADIS events."
-              : "We couldn't send your digital membership card email just now \u2014 please contact the ADIS committee and we'll issue it manually."}
+            {info.membershipType === "family"
+              ? "A welcome email is on its way to both adults. Once the committee has confirmed your payment, each of you will receive your own digital membership card by email."
+              : "A welcome email is on its way to you. Once the committee has confirmed your payment, you'll receive your digital membership card by email."}
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
             You'll also receive information about upcoming events, member benefits and the ADIS community.

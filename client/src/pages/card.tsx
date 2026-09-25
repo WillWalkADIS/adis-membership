@@ -83,7 +83,8 @@ export default function MembershipCard() {
   const hasExpired = new Date(data.membershipExpiryDate).getTime() < now;
   // "declared" means the member paid through the payment link and the
   // committee has not reconciled it yet — the membership is active either way.
-  const isActive = data.paymentStatus === "paid" || data.paymentStatus === "declared";
+  // Only a payment confirmed by the committee makes a card active.
+  const isActive = data.paymentStatus === "paid";
   const statusLabel = hasExpired ? "Expired" : isActive ? "Active" : "Pending payment";
 
   return (

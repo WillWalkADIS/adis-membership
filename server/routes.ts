@@ -6,20 +6,15 @@ import { insertRegistrationSchema } from "@shared/schema";
 import { currentOtp, verifyOtp, OTP_PERIOD_SECONDS } from "./otp";
 import {
   sendMembershipCardEmail,
-  sendRegistrationReceivedEmail,
+  sendWelcomeEmail,
   emailTransport,
 } from "./email";
 import { runReminderSweep } from "./reminders";
 import { ADMIN_EMAIL, verifyAdminPassword, cardUrlFor } from "./config";
 
-// Cards are issued once a payment exists: the member has been through the
-// hosted payment link during sign-up ("declared"), or a committee member has
-// recorded a cash/bank transfer ("paid"). Set ISSUE_CARD_ON_REGISTRATION=true
-// to issue on sign-up regardless of payment.
-const ISSUE_CARD_ON_REGISTRATION = process.env.ISSUE_CARD_ON_REGISTRATION === "true";
-
-// Statuses that count as an active membership.
-const ACTIVE_PAYMENT_STATUSES = ["paid", "declared"];
+// Membership cards are only ever emailed once a committee member has marked
+// the registration as paid in the dashboard. Ticking "I have paid" on the form
+// is recorded as "declared" but never releases a card on its own.
 
 // The OTP secret must never leave the server, not even to the authenticated
 // committee admin dashboard — it is the literal key that generates a valid
@@ -110,40 +105,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!parsed.data.consentTerms || !parsed.data.consentPrivacy) {
       return res.status(400).json({ message: "Required consents were not accepted" });
     }
-    const registration = await storage.createRegistration(parsed.data);
-
-    // If they have already paid, the welcome email (sent with their card just
-    // below) is the acknowledgement — sending both would mean two near-identical
-    // emails in the same minute. Only people who have not paid get the separate
-    // "registration received" note.
-    const willReceiveCardNow =
-      ISSUE_CARD_ON_REGISTRATION || ACTIVE_PAYMENT_STATUSES.includes(registration.paymentStatus);
-
-    if (!willReceiveCardNow) {
-      // Never block the response on an email — a member should not see an error
-      // because an email provider was slow.
-      try {
-        await sendRegistrationReceivedEmail({
-          to: registration.primaryEmail,
-          name: registration.primaryFullName,
-          membershipNumber: registration.membershipNumber,
-          membershipType: registration.membershipType,
-          amountDue: registration.amountDue,
-          paymentStatus: registration.paymentStatus,
-        });
-        await storage.markWelcomeEmailSent(registration.id);
-      } catch (err) {
-        console.error("Could not send registration acknowledgement:", err);
+    if (parsed.data.membershipType === "family") {
+      const partnerEmail = (parsed.data.secondAdultEmail ?? "").trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerEmail)) {
+        return res
+          .status(400)
+          .json({ message: "A valid email address for the second adult is required for a family membership" });
       }
     }
+    const registration = await storage.createRegistration(parsed.data);
 
-    let cardEmailSent = false;
-    if (willReceiveCardNow) {
-      cardEmailSent = await issueCard(registration);
-    }
+    // Welcome email to each adult straight away. It deliberately contains no
+    // card. Never block the response on email — a member should not see an
+    // error because an email provider was slow.
+    await sendWelcomeEmails(registration);
 
     const { cardToken, ...publicRegistration } = omitOtpSecret(registration);
-    res.status(201).json({ ...publicRegistration, cardEmailSent });
+    res.status(201).json({ ...publicRegistration, cardEmailSent: false });
   });
 
   // Short, fragment-free links used in emails. Email clients often drop
@@ -162,12 +140,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Returns a fresh rotating code each time so the QR on the card page can
   // refresh itself every 5 minutes.
   app.get("/api/card/:cardToken", async (req, res) => {
-    const registration = await storage.getRegistrationByCardToken(req.params.cardToken);
-    if (!registration) return res.status(404).json({ message: "Card not found" });
+    const found = await storage.findCardHolder(req.params.cardToken);
+    if (!found) return res.status(404).json({ message: "Card not found" });
+    const { registration, name, otpSecret } = found;
 
-    const { code, expiresAt } = currentOtp(registration.otpSecret);
+    const { code, expiresAt } = currentOtp(otpSecret);
     res.json({
-      primaryFullName: registration.primaryFullName,
+      // Name of whoever holds this particular card (either adult on a family).
+      primaryFullName: name,
       membershipNumber: registration.membershipNumber,
       membershipType: registration.membershipType,
       paymentStatus: registration.paymentStatus,
@@ -184,13 +164,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/verify", verifyLimiter, async (req, res) => {
     const cardToken = typeof req.query.token === "string" ? req.query.token : "";
     const code = typeof req.query.code === "string" ? req.query.code : "";
-    const registration = cardToken ? await storage.getRegistrationByCardToken(cardToken) : undefined;
+    const found = cardToken ? await storage.findCardHolder(cardToken) : undefined;
 
-    if (!registration) {
+    if (!found) {
       return res.status(404).json({ valid: false, message: "Membership card not recognised." });
     }
 
-    if (!verifyOtp(registration.otpSecret, code)) {
+    const { registration, name } = found;
+
+    if (!verifyOtp(found.otpSecret, code)) {
       return res.json({
         valid: false,
         message:
@@ -204,13 +186,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         valid: false,
         message: "This membership has expired and needs to be renewed.",
         membershipNumber: registration.membershipNumber,
-        name: registration.primaryFullName,
+        name,
+      });
+    }
+
+    // Only a membership the committee has confirmed as paid is valid.
+    if (registration.paymentStatus !== "paid") {
+      return res.json({
+        valid: false,
+        message: "This membership has not been confirmed as paid yet.",
+        membershipNumber: registration.membershipNumber,
+        name,
       });
     }
 
     return res.json({
       valid: true,
-      name: registration.primaryFullName,
+      name,
       membershipNumber: registration.membershipNumber,
       membershipType: registration.membershipType,
       paymentStatus: registration.paymentStatus,
@@ -224,9 +216,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const registration = await storage.getRegistration(Number(req.params.id));
     if (!registration) return res.status(404).json({ message: "Not found" });
 
-    const ok = await issueCard(registration);
-    if (!ok) return res.status(502).json({ message: "The email could not be sent. Please try again." });
-    res.json({ ok: true });
+    if (registration.paymentStatus !== "paid") {
+      return res
+        .status(400)
+        .json({ message: "Mark this member as paid first — cards only go to confirmed members." });
+    }
+    const { primarySent, partnerSent } = await issueCards(registration.id, { force: true });
+    if (!primarySent) return res.status(502).json({ message: "The email could not be sent. Please try again." });
+    res.json({ ok: true, partnerSent });
   });
 
   // List all registrations (committee admin view)
@@ -308,12 +305,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Only email a card if they did not already get one (e.g. a cash payment
     // being recorded for the first time), so confirming a payment-link member
     // does not send them a duplicate.
+    // This is the only thing that releases membership cards. Anyone who
+    // already has one (e.g. a card re-confirmed later) is not emailed again.
     let cardEmailSent = false;
-    if (updated && !existing.cardEmailSentAt) {
-      cardEmailSent = await issueCard(updated);
+    let partnerCardEmailSent = false;
+    if (updated) {
+      const result = await issueCards(updated.id, { force: false });
+      cardEmailSent = result.primarySent;
+      partnerCardEmailSent = result.partnerSent;
     }
 
-    res.json(updated ? { ...omitOtpSecret(updated), cardEmailSent } : updated);
+    res.json(updated ? { ...omitOtpSecret(updated), cardEmailSent, partnerCardEmailSent } : updated);
   });
 
   // Admin: run the renewal reminder sweep on demand, so the committee can
@@ -326,28 +328,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   return httpServer;
 }
 
-async function issueCard(registration: {
-  id: number;
-  primaryEmail: string;
-  primaryFullName: string;
-  membershipNumber: string;
-  membershipType: string;
-  cardToken: string;
-  membershipExpiryDate: string;
-}): Promise<boolean> {
+function partnerNameOf(r: { secondAdultFirstName: string | null; secondAdultSurname: string | null }) {
+  return `${r.secondAdultFirstName ?? ""} ${r.secondAdultSurname ?? ""}`.trim();
+}
+
+async function sendWelcomeEmails(registration: Awaited<ReturnType<typeof storage.getRegistration>> & {}) {
+  const common = {
+    membershipNumber: registration.membershipNumber,
+    membershipType: registration.membershipType,
+    expiryDate: registration.membershipExpiryDate,
+  };
   try {
-    await sendMembershipCardEmail({
-      to: registration.primaryEmail,
-      name: registration.primaryFullName,
-      membershipNumber: registration.membershipNumber,
-      membershipType: registration.membershipType,
-      cardUrl: cardUrlFor(registration.cardToken),
-      expiryDate: registration.membershipExpiryDate,
-    });
-    await storage.markCardEmailSent(registration.id);
-    return true;
+    await sendWelcomeEmail({ to: registration.primaryEmail, name: registration.primaryFullName, ...common });
+    await storage.markWelcomeEmailSent(registration.id);
   } catch (err) {
-    console.error("Could not send membership card email:", err);
-    return false;
+    console.error("Could not send welcome email:", err);
   }
+  if (registration.membershipType === "family" && registration.secondAdultEmail) {
+    try {
+      await sendWelcomeEmail({ to: registration.secondAdultEmail, name: partnerNameOf(registration), ...common });
+      await storage.markPartnerWelcomeEmailSent(registration.id);
+    } catch (err) {
+      console.error("Could not send partner welcome email:", err);
+    }
+  }
+}
+
+// Emails each adult their own card. Only called once a registration is paid.
+async function issueCards(
+  id: number,
+  { force }: { force: boolean },
+): Promise<{ primarySent: boolean; partnerSent: boolean }> {
+  const registration = await storage.ensurePartnerCard(id);
+  if (!registration || registration.paymentStatus !== "paid") {
+    return { primarySent: false, partnerSent: false };
+  }
+  const common = {
+    membershipNumber: registration.membershipNumber,
+    membershipType: registration.membershipType,
+    expiryDate: registration.membershipExpiryDate,
+  };
+
+  let primarySent = false;
+  if (force || !registration.cardEmailSentAt) {
+    try {
+      await sendMembershipCardEmail({
+        to: registration.primaryEmail,
+        name: registration.primaryFullName,
+        cardUrl: cardUrlFor(registration.cardToken),
+        ...common,
+      });
+      await storage.markCardEmailSent(registration.id);
+      primarySent = true;
+    } catch (err) {
+      console.error("Could not send membership card email:", err);
+    }
+  }
+
+  let partnerSent = false;
+  if (
+    registration.membershipType === "family" &&
+    registration.secondAdultEmail &&
+    registration.partnerCardToken &&
+    (force || !registration.partnerCardEmailSentAt)
+  ) {
+    try {
+      await sendMembershipCardEmail({
+        to: registration.secondAdultEmail,
+        name: partnerNameOf(registration),
+        cardUrl: cardUrlFor(registration.partnerCardToken),
+        ...common,
+      });
+      await storage.markPartnerCardEmailSent(registration.id);
+      partnerSent = true;
+    } catch (err) {
+      console.error("Could not send partner membership card email:", err);
+    }
+  }
+
+  return { primarySent, partnerSent };
 }

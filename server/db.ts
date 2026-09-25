@@ -1,3 +1,4 @@
+import { membershipExpiryFor } from "./config";
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
@@ -82,6 +83,10 @@ async function migrate(): Promise<void> {
       card_token TEXT NOT NULL UNIQUE,
       otp_secret TEXT NOT NULL,
       card_email_sent_at TEXT,
+      partner_card_token TEXT UNIQUE,
+      partner_otp_secret TEXT,
+      partner_card_email_sent_at TEXT,
+      partner_welcome_email_sent_at TEXT,
       welcome_email_sent_at TEXT,
       reminder_30_sent_at TEXT,
       reminder_7_sent_at TEXT,
@@ -93,6 +98,10 @@ async function migrate(): Promise<void> {
   // supports IF NOT EXISTS on ADD COLUMN, so this is safe to re-run.
   for (const column of [
     "payment_declared_at",
+    "partner_card_token",
+    "partner_otp_secret",
+    "partner_card_email_sent_at",
+    "partner_welcome_email_sent_at",
     "welcome_email_sent_at",
     "reminder_30_sent_at",
     "reminder_7_sent_at",
@@ -104,4 +113,21 @@ async function migrate(): Promise<void> {
   await db.execute(
     sql`CREATE INDEX IF NOT EXISTS registrations_expiry_idx ON registrations(membership_expiry_date)`,
   );
+  await db.execute(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS registrations_partner_card_idx ON registrations(partner_card_token)`,
+  );
+
+  // Move anyone registered under the old "one year from joining" rule onto the
+  // fixed 30 September end date. Rows already ending on 30 September are left
+  // alone, so this is a no-op after the first run.
+  const legacy = await db.execute(
+    sql`SELECT id, registration_date FROM registrations WHERE membership_expiry_date NOT LIKE '%-09-30T19:59:59.999Z'`,
+  );
+  const rows = ((legacy as any).rows ?? legacy) as { id: number; registration_date: string }[];
+  for (const row of rows) {
+    const expiry = membershipExpiryFor(new Date(row.registration_date));
+    await db.execute(
+      sql`UPDATE registrations SET membership_expiry_date = ${expiry} WHERE id = ${row.id}`,
+    );
+  }
 }

@@ -22,6 +22,20 @@ export function cardUrlFor(cardToken: string): string {
   return `${SITE_BASE_URL}/c/${cardToken}`;
 }
 
+// Every ADIS membership ends on 30 September, whenever it was paid for.
+// Anyone joining from 1 August onwards is given the following year's
+// 30 September, so late joiners are not sold a membership that ends within
+// weeks. Months are read in UAE time (UTC+4), and the membership runs to
+// 23:59:59 UAE time on the 30th.
+export const MEMBERSHIP_ROLLOVER_MONTH = 7; // 0-based: 7 = August
+
+export function membershipExpiryFor(joined: Date): string {
+  const uae = new Date(joined.getTime() + 4 * 60 * 60 * 1000);
+  const year =
+    uae.getUTCMonth() >= MEMBERSHIP_ROLLOVER_MONTH ? uae.getUTCFullYear() + 1 : uae.getUTCFullYear();
+  return new Date(Date.UTC(year, 8, 30, 19, 59, 59, 999)).toISOString();
+}
+
 export function renewUrlFor(membershipNumber: string): string {
   return `${SITE_BASE_URL}/r/${encodeURIComponent(membershipNumber)}`;
 }

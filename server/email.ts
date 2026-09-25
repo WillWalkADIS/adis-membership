@@ -334,35 +334,63 @@ export async function sendRegistrationReceivedEmail(params: {
 // 2. Digital membership card
 // ---------------------------------------------------------------------------
 
-export async function sendMembershipCardEmail(params: {
-  to: string;
-  name: string;
-  membershipNumber: string;
-  membershipType: string;
-  cardUrl: string;
-  expiryDate?: string;
-}): Promise<void> {
-  const { to, name, membershipNumber, membershipType, cardUrl, expiryDate } = params;
-  const typeLabel = typeLabelFor(membershipType);
+// Two emails share the committee's approved design:
+//
+//   "welcome" – sent the moment anyone registers (both adults on a Family
+//               membership). No card: nobody gets a card until a committee
+//               member has confirmed their payment.
+//   "card"    – sent only when a committee member marks the registration as
+//               paid in the dashboard. Carries that person's own card link.
+type MemberEmailMode = "welcome" | "card";
 
-  const subject = `Fáilte chuig Abu Dhabi Irish Society — ${membershipNumber}`;
+function buildMemberEmail(
+  mode: MemberEmailMode,
+  params: {
+    name: string;
+    membershipNumber: string;
+    membershipType: string;
+    expiryDate?: string;
+    cardUrl?: string;
+  },
+): { subject: string; text: string; html: string } {
+  const { name, membershipNumber, membershipType, expiryDate, cardUrl } = params;
+  const typeLabel = typeLabelFor(membershipType);
+  const isCard = mode === "card" && !!cardUrl;
+
+  const subject = isCard
+    ? `Your ADIS membership card — ${membershipNumber}`
+    : `Fáilte chuig Abu Dhabi Irish Society — ${membershipNumber}`;
+
+  const cardNoteText = isCard
+    ? [
+        `Your membership card: ${cardUrl}`,
+        ``,
+        `Your membership card is unique to you and includes a personal QR code. Please show your QR code to participating discount partners to avail of exclusive member benefits (redemption rules apply).`,
+        ``,
+        `Please note: your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open the link live rather than sending a screenshot.`,
+      ]
+    : [
+        `Your digital membership card will be emailed to you as soon as the committee has confirmed your payment.`,
+      ];
 
   const text = [
     `A Chairde,`,
     ``,
-    `Fáilte chuig Abu Dhabi Irish Society! Thanks for joining up.`,
+    isCard
+      ? `Your payment has been confirmed - here is your Abu Dhabi Irish Society membership card.`
+      : `Fáilte chuig Abu Dhabi Irish Society! Thanks for joining up.`,
     ``,
     `We are delighted to welcome you to our community - your home away from home, right here in Abu Dhabi.`,
     ``,
     `MEMBERSHIP DETAILS`,
+    `Member: ${name}`,
     `Membership number: ${membershipNumber}`,
     `Membership type: ${typeLabel}`,
     ...(expiryDate ? [`Valid until: ${formatDate(expiryDate)}`] : []),
-    `Your membership card: ${cardUrl}`,
     ``,
-    `Your membership card is unique to you and includes a personal QR code. Please show your QR code to participating discount partners to avail of exclusive member benefits (redemption rules apply).`,
+    ...cardNoteText,
     ``,
-    `Please note: your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open the link live rather than sending a screenshot.`,
+    `Sponsors and discount partners: ${LINKS.linktree}`,
     ``,
     `STAY CONNECTED`,
     `Instagram: ${LINKS.instagram}`,
@@ -371,8 +399,6 @@ export async function sendMembershipCardEmail(params: {
     `WhatsApp Community: ${LINKS.whatsapp}`,
     `Facebook: ${LINKS.facebook}`,
     ...(LINKS.linktree ? [`Linktree: ${LINKS.linktree}`] : []),
-    ``,
-    `Sponsors and discount partners: ${LINKS.linktree}`,
     ``,
     `Activate your 20% McCafferty's discount: ${LINKS.mccaffertys}`,
     ``,
@@ -392,30 +418,45 @@ export async function sendMembershipCardEmail(params: {
     ? LINKS.volunteer
     : `mailto:${PRESIDENT_EMAIL}?subject=${encodeURIComponent("I'd like to volunteer with ADIS")}`;
 
+  const cardHtml = isCard
+    ? [
+        p(
+          `Your membership card is unique to you and includes a personal QR code. Please show your QR code to participating discount partners to avail of exclusive member benefits (redemption rules apply).`,
+        ),
+        p(
+          `<strong>Please note:</strong> your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open your card link live at events rather than sending a screenshot.`,
+        ),
+      ].join("")
+    : p(
+        `Your digital membership card will be emailed to you as soon as the committee has confirmed your payment.`,
+      );
+
   const html = welcomeLayout(
     [
       `<p style="margin:0;font-size:16px;font-weight:700;color:${GREEN};">A Chairde,</p>`,
-      `<h1 style="margin:4px 0 6px;font-size:26px;line-height:1.25;font-weight:700;color:${GREEN};">Fáilte chuig Abu Dhabi Irish Society!</h1>`,
-      `<p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${GOLD};">Thanks for joining up.</p>`,
+      isCard
+        ? `<h1 style="margin:4px 0 6px;font-size:26px;line-height:1.25;font-weight:700;color:${GREEN};">Your ADIS membership card is ready</h1>
+           <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${GOLD};">Your payment has been confirmed.</p>`
+        : `<h1 style="margin:4px 0 6px;font-size:26px;line-height:1.25;font-weight:700;color:${GREEN};">Fáilte chuig Abu Dhabi Irish Society!</h1>
+           <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:${GOLD};">Thanks for joining up.</p>`,
       p(`We are delighted to welcome you to our community - your home away from home, right here in Abu Dhabi.`),
 
       h2("Membership Details"),
       `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px;">
+        ${detailRow("Member:", escapeHtml(name))}
         ${detailRow("Membership Number:", escapeHtml(membershipNumber))}
         ${detailRow("Membership Type:", escapeHtml(typeLabel))}
         ${expiryDate ? detailRow("Valid Until:", escapeHtml(formatDate(expiryDate))) : ""}
-        ${detailRow(
-          "Your membership card:",
-          `<a href="${cardUrl}" style="color:${GREEN};font-weight:700;">Click here to view and download your membership card</a>`,
-        )}
+        ${
+          isCard
+            ? detailRow(
+                "Your membership card:",
+                `<a href="${cardUrl}" style="color:${GREEN};font-weight:700;">Click here to view and download your membership card</a>`,
+              )
+            : ""
+        }
       </table>`,
-      p(
-        `Your membership card is unique to you and includes a personal QR code. Please show your QR code to participating discount partners to avail of exclusive member benefits (redemption rules apply).`,
-      ),
-      p(
-        `<strong>Please note:</strong> your QR code is unique to your membership and cannot be shared with anyone else. It refreshes every 5 minutes, so open your card link live at events rather than sending a screenshot.`,
-      ),
-
+      cardHtml,
       `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;"><a href="${LINKS.linktree}" style="color:${GREEN};font-weight:700;text-decoration:underline;">Click the Linktree to find our sponsors and discount partners.</a></p>`,
 
       h2("Stay connected with the Abu Dhabi Irish Society"),
@@ -445,7 +486,34 @@ export async function sendMembershipCardEmail(params: {
     ].join(""),
   );
 
-  await sendEmail({ to, subject, text, html });
+  return { subject, text, html };
+}
+
+// Sent to each adult as soon as they register. Never contains a card.
+export async function sendWelcomeEmail(params: {
+  to: string;
+  name: string;
+  membershipNumber: string;
+  membershipType: string;
+  expiryDate?: string;
+}): Promise<void> {
+  const { to, ...rest } = params;
+  const msg = buildMemberEmail("welcome", rest);
+  await sendEmail({ to, ...msg });
+}
+
+// Sent to each adult only once the committee has marked them as paid.
+export async function sendMembershipCardEmail(params: {
+  to: string;
+  name: string;
+  membershipNumber: string;
+  membershipType: string;
+  cardUrl: string;
+  expiryDate?: string;
+}): Promise<void> {
+  const { to, ...rest } = params;
+  const msg = buildMemberEmail("card", rest);
+  await sendEmail({ to, ...msg });
 }
 
 // ---------------------------------------------------------------------------
