@@ -159,6 +159,20 @@ export default function Admin() {
     },
   });
 
+  const unmarkPaid = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("PATCH", `/api/registrations/${id}/unmark-paid`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/registrations"] });
+      toast({ title: "Moved back to Paid — to verify" });
+    },
+    onError: () => {
+      toast({ title: "Could not update payment status", variant: "destructive" });
+    },
+  });
+
   const remove = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `/api/registrations/${id}`);
@@ -320,6 +334,25 @@ export default function Admin() {
                               data-testid={`button-mark-paid-${r.id}`}
                             >
                               {r.paymentStatus === "declared" ? "Confirm paid & send card" : "Mark paid & send card"}
+                            </Button>
+                          )}
+                          {r.paymentStatus === "paid" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Move ${r.membershipNumber} back to "Paid — to verify"? Their card will not scan at the door until you confirm them again.`,
+                                  )
+                                ) {
+                                  unmarkPaid.mutate(r.id);
+                                }
+                              }}
+                              disabled={unmarkPaid.isPending}
+                              data-testid={`button-unmark-paid-${r.id}`}
+                            >
+                              Undo paid
                             </Button>
                           )}
                           <Button

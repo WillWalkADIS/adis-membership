@@ -297,6 +297,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // an event). Once the gateway's keys are connected, its webhook will call the
   // same code path so both routes to "paid" behave identically — including
   // issuing the member's card.
+  app.patch("/api/registrations/:id/unmark-paid", requireAdmin, async (req, res) => {
+    const updated = await storage.unmarkPaid(Number(req.params.id));
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    res.json(omitOtpSecret(updated));
+  });
+
   app.patch("/api/registrations/:id/mark-paid", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const existing = await storage.getRegistration(id);

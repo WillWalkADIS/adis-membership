@@ -225,6 +225,18 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return row ? toWithChildren(row) : undefined;
   }
+
+  // Moves a paid member back to "paid — to verify". Their card stops working
+  // at the door until the committee confirms them again. Card-sent stamps are
+  // kept, so re-confirming does not email a duplicate card.
+  async unmarkPaid(id: number): Promise<RegistrationWithChildren | undefined> {
+    const [row] = await getDb()
+      .update(registrations)
+      .set({ paymentStatus: "declared" })
+      .where(eq(registrations.id, id))
+      .returning();
+    return row ? toWithChildren(row) : undefined;
+  }
 }
 
 export const storage = new DatabaseStorage();
