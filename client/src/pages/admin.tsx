@@ -287,15 +287,18 @@ export default function Admin() {
                       <TableHead>Type</TableHead>
                       <TableHead>New/Renewal</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead>Payment</TableHead>
-                      <TableHead>Registered</TableHead>
-                      <TableHead />
+                      <TableHead>Payment &amp; actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {registrations.map((r) => (
                       <TableRow key={r.id} data-testid={`row-registration-${r.id}`}>
-                        <TableCell className="font-medium">{r.membershipNumber}</TableCell>
+                        <TableCell className="font-medium">
+                          {r.membershipNumber}
+                          <div className="mt-1 whitespace-nowrap text-xs font-normal text-muted-foreground">
+                            {new Date(r.registrationDate).toLocaleDateString("en-GB")}
+                          </div>
+                        </TableCell>
                         <TableCell>{r.primaryFullName}</TableCell>
                         <TableCell>
                           {r.secondAdultFirstName ? `${r.secondAdultFirstName} ${r.secondAdultSurname ?? ""}` : "—"}
@@ -320,59 +323,56 @@ export default function Admin() {
                               Ref: {r.paymentReference}
                             </div>
                           ) : null}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {new Date(r.registrationDate).toLocaleDateString("en-GB")}
-                        </TableCell>
-                        <TableCell>
-                          {r.paymentStatus !== "paid" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => markPaid.mutate(r.id)}
-                              disabled={markPaid.isPending}
-                              data-testid={`button-mark-paid-${r.id}`}
-                            >
-                              {r.paymentStatus === "declared" ? "Confirm paid & send card" : "Mark paid & send card"}
-                            </Button>
-                          )}
-                          {r.paymentStatus === "paid" && (
+                          <div className="mt-2 flex flex-col items-start gap-1">
+                            {r.paymentStatus !== "paid" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => markPaid.mutate(r.id)}
+                                disabled={markPaid.isPending}
+                                data-testid={`button-mark-paid-${r.id}`}
+                              >
+                                {r.paymentStatus === "declared" ? "Confirm paid & send card" : "Mark paid & send card"}
+                              </Button>
+                            )}
+                            {r.paymentStatus === "paid" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Move ${r.membershipNumber} back to "Paid — to verify"? Their card will not scan at the door until you confirm them again.`,
+                                    )
+                                  ) {
+                                    unmarkPaid.mutate(r.id);
+                                  }
+                                }}
+                                disabled={unmarkPaid.isPending}
+                                data-testid={`button-unmark-paid-${r.id}`}
+                              >
+                                Undo paid
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
+                              className="text-destructive"
                               onClick={() => {
                                 if (
                                   window.confirm(
-                                    `Move ${r.membershipNumber} back to "Paid — to verify"? Their card will not scan at the door until you confirm them again.`,
+                                    `Delete ${r.membershipNumber} (${r.primaryFullName})? This cannot be undone and their card will stop working.`,
                                   )
                                 ) {
-                                  unmarkPaid.mutate(r.id);
+                                  remove.mutate(r.id);
                                 }
                               }}
-                              disabled={unmarkPaid.isPending}
-                              data-testid={`button-unmark-paid-${r.id}`}
+                              disabled={remove.isPending}
+                              data-testid={`button-delete-${r.id}`}
                             >
-                              Undo paid
+                              Delete
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="ml-1 text-destructive"
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Delete ${r.membershipNumber} (${r.primaryFullName})? This cannot be undone and their card will stop working.`,
-                                )
-                              ) {
-                                remove.mutate(r.id);
-                              }
-                            }}
-                            disabled={remove.isPending}
-                            data-testid={`button-delete-${r.id}`}
-                          >
-                            Delete
-                          </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
