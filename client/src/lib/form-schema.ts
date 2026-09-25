@@ -49,7 +49,7 @@ export const joinFormSchema = z
       .string()
       .max(120)
       .refine((v) => v.trim().length >= 4, {
-        message: "Enter the Order # shown on your PRJCT payment confirmation (e.g. 99J9Z1)",
+        message: "Enter the Order # shown on your PRJCT payment confirmation (e.g. AB12CD)",
       }),
   })
   .superRefine((data, ctx) => {
@@ -91,6 +91,7 @@ export const MEMBERSHIP_FEES: Record<"single" | "family", number> = {
 // Hosted payment pages provided by PRJCT Abu Dhabi. Each link is pre-set to
 // the right fee, so the member never types an amount.
 export const PAYMENT_LINKS: Record<"single" | "family", string> = {
-  single: "https://pmnnt.co/c/bp0chzwg",
-  family: "https://pmnnt.co/c/brExptC2",
+  // Both memberships are bought from the PRJCT Abu Dhabi online shop.
+  single: "https://prjct-middle-east-events-l-l-c-s-p-c.paymennt.shop/",
+  family: "https://prjct-middle-east-events-l-l-c-s-p-c.paymennt.shop/",
 };

@@ -421,7 +421,7 @@ function PaymentStep({
     <div className="space-y-5">
       <StepHeading
         title="Pay Your Membership Fee"
-        description="The last step. Payment is taken securely by PRJCT Abu Dhabi on behalf of ADIS. Once you have paid, come back to this page, tick the box and click Complete my membership."
+        description="The last step. Memberships are paid for through the PRJCT Abu Dhabi online shop on behalf of ADIS."
       />
 
       <div className="rounded-lg border border-border bg-accent/40 p-4">
@@ -433,6 +433,15 @@ function PaymentStep({
         </div>
       </div>
 
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground" data-testid="list-payment-steps">
+        <li>Click the button below to open the PRJCT Abu Dhabi shop.</li>
+        <li>
+          Select <strong>{typeLabel}</strong> (AED {amountDue}) and pay.
+        </li>
+        <li>Copy the <strong>Order #</strong> shown on your payment confirmation.</li>
+        <li>Come back to this page, tick the box, enter your Order # and click Complete my membership.</li>
+      </ol>
+
       <div className="space-y-3">
         <a
           href={link}
@@ -443,7 +452,7 @@ function PaymentStep({
           data-testid="link-payment"
         >
           <CreditCard className="h-4 w-4" />
-          Pay AED {amountDue} now
+          Open the PRJCT shop to pay
           <ExternalLink className="h-3.5 w-3.5 opacity-80" />
         </a>
         <p className="text-xs text-muted-foreground">
@@ -465,7 +474,7 @@ function PaymentStep({
             data-testid="checkbox-payment-confirmed"
           />
           <span className="text-sm text-foreground">
-            I have paid AED {amountDue} through the payment link above and my payment showed as complete
+            I have paid AED {amountDue} through the PRJCT shop and my payment showed as complete
           </span>
         </label>
 
@@ -483,7 +492,7 @@ function PaymentStep({
           <Input
             id="payment-reference"
             {...form.register("paymentReference")}
-            placeholder="e.g. 99J9Z1"
+            placeholder="e.g. AB12CD"
             data-testid="input-payment-reference"
           />
         </Field>
