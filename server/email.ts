@@ -404,9 +404,6 @@ function buildMemberEmail(
     ``,
     `Become a volunteer: ${LINKS.volunteer || `mailto:${PRESIDENT_EMAIL}`}`,
     ``,
-    `GET IN TOUCH`,
-    `We'd love to hear from you. Please reach out to our President, ${PRESIDENT_NAME}: ${PRESIDENT_EMAIL}`,
-    ``,
     `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
     ``,
     `Míle buíochas,`,
@@ -466,14 +463,7 @@ function buildMemberEmail(
       wideButton(LINKS.mccaffertys, "ACTIVATE YOUR 20% McCAFFERTY'S DISCOUNT"),
       wideButton(volunteerHref, "BECOME A VOLUNTEER"),
 
-      h2("Get in touch"),
-      p(`We'd love to hear from you. Please reach out to our President:`),
-      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
-        ${detailRow(
-          "President",
-          `${escapeHtml(PRESIDENT_NAME)} &nbsp;&nbsp; <a href="mailto:${PRESIDENT_EMAIL}" style="color:${GREEN};font-weight:700;">${PRESIDENT_EMAIL}</a>`,
-        )}
-      </table>`,
+      `<div style="height:10px;"></div>`,
       p(
         `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
       ),
