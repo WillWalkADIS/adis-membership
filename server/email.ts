@@ -400,8 +400,9 @@ function buildMemberEmail(
     `Facebook: ${LINKS.facebook}`,
     ...(LINKS.linktree ? [`Linktree: ${LINKS.linktree}`] : []),
     ``,
-    `Activate your 20% McCafferty's discount: ${LINKS.mccaffertys}`,
-    ``,
+    // The McCafferty's discount is a paid-member benefit, so it only appears
+    // in the card email sent once the committee confirms payment.
+    ...(isCard ? [`Activate your 20% McCafferty's discount: ${LINKS.mccaffertys}`, ``] : []),
     `Become a volunteer: ${LINKS.volunteer || `mailto:${PRESIDENT_EMAIL}`}`,
     ``,
     `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
@@ -460,7 +461,7 @@ function buildMemberEmail(
       socialRow(),
 
       `<div style="height:8px;"></div>`,
-      wideButton(LINKS.mccaffertys, "ACTIVATE YOUR 20% McCAFFERTY'S DISCOUNT"),
+      isCard ? wideButton(LINKS.mccaffertys, "ACTIVATE YOUR 20% McCAFFERTY'S DISCOUNT") : "",
       wideButton(volunteerHref, "BECOME A VOLUNTEER"),
 
       `<div style="height:10px;"></div>`,
