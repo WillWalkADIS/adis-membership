@@ -40,8 +40,9 @@ import {
   type JoinFormValues,
 } from "@/lib/form-schema";
 
-// Payment is deliberately the last step, straight before the final submit.
-const STEPS = ["Membership", "Your Details", "Family", "Preferences", "Review", "Payment"];
+// Details are submitted first; payment in the PRJCT shop follows on its own
+// screen once the registration has been saved.
+const STEPS = ["Membership", "Your Details", "Family", "Preferences", "Review"];
 
 type SuccessInfo = {
   membershipNumber: string;
@@ -51,6 +52,7 @@ type SuccessInfo = {
   registrationDate: string;
   membershipExpiryDate: string;
   cardEmailSent: boolean;
+  paymentToken: string;
 };
 
 export default function Join() {
@@ -58,6 +60,7 @@ export default function Join() {
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<SuccessInfo | null>(null);
+  const [paymentDone, setPaymentDone] = useState(false);
 
   const form = useForm<JoinFormValues>({
     resolver: zodResolver(joinFormSchema),
@@ -80,8 +83,6 @@ export default function Join() {
       receiveMarketing: false,
       consentTerms: false,
       consentPrivacy: false,
-      paymentConfirmed: false,
-      paymentReference: "",
     },
     mode: "onTouched",
   });
@@ -103,7 +104,6 @@ export default function Join() {
   async function goNext() {
     const fieldsByStep: Record<string, (keyof JoinFormValues)[]> = {
       Membership: ["membershipType"],
-      Payment: ["paymentConfirmed"],
       "Your Details": [
         "primaryFullName",
         "primaryEmail",
@@ -156,8 +156,7 @@ export default function Join() {
       const payload = {
         ...values,
         amountDue: MEMBERSHIP_FEES[values.membershipType],
-        paymentDeclared: values.paymentConfirmed,
-        paymentReference: values.paymentReference || undefined,
+        paymentDeclared: false,
         children: isFamily ? values.children : [],
         secondAdultFirstName: isFamily ? values.secondAdultFirstName : "",
         secondAdultSurname: isFamily ? values.secondAdultSurname : "",
@@ -174,6 +173,7 @@ export default function Join() {
         registrationDate: registration.registrationDate,
         membershipExpiryDate: registration.membershipExpiryDate,
         cardEmailSent: Boolean(registration.cardEmailSent),
+        paymentToken: registration.paymentToken,
       });
     } catch (err) {
       // Show the server's reason (e.g. an Order # already used) where it helps.
@@ -183,9 +183,6 @@ export default function Join() {
         reason = JSON.parse(raw.slice(raw.indexOf("{"))).message ?? "";
       } catch {
         reason = "";
-      }
-      if (/order #/i.test(reason)) {
-        form.setError("paymentReference", { message: reason });
       }
       toast({
         title: "Something went wrong",
@@ -197,6 +194,9 @@ export default function Join() {
     }
   }
 
+  if (success && !paymentDone) {
+    return <PaymentScreen info={success} onDone={() => setPaymentDone(true)} />;
+  }
   if (success) {
     return <SuccessScreen info={success} />;
   }
@@ -244,9 +244,6 @@ export default function Join() {
               {currentStepLabel === "Membership" && (
                 <MembershipStep form={form} />
               )}
-              {currentStepLabel === "Payment" && (
-                <PaymentStep form={form} membershipType={membershipType} amountDue={amountDue} />
-              )}
               {currentStepLabel === "Your Details" && (
                 <PrimaryDetailsStep form={form} />
               )}
@@ -293,7 +290,7 @@ export default function Join() {
                         Processing...
                       </>
                     ) : (
-                      "COMPLETE MY MEMBERSHIP"
+                      "SUBMIT DETAILS AND MOVE ON TO PAYMENT"
                     )}
                   </Button>
                 )}
@@ -403,110 +400,157 @@ function MembershipStep({ form }: { form: ReturnType<typeof useForm<JoinFormValu
   );
 }
 
-function PaymentStep({
-  form,
-  membershipType,
-  amountDue,
-}: {
-  form: ReturnType<typeof useForm<JoinFormValues>>;
-  membershipType: "single" | "family" | undefined;
-  amountDue: number;
-}) {
+// Shown straight after the details are saved. The member pays in the PRJCT
+// shop, then enters the Order # so the committee can match the payment.
+function PaymentScreen({ info, onDone }: { info: SuccessInfo; onDone: () => void }) {
   const [opened, setOpened] = useState(false);
-  const confirmed = form.watch("paymentConfirmed");
-  const link = membershipType ? PAYMENT_LINKS[membershipType] : undefined;
-  const typeLabel = membershipType === "family" ? "Family Membership" : "Single Membership";
+  const [confirmed, setConfirmed] = useState(false);
+  const [orderRef, setOrderRef] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const isFamily = info.membershipType === "family";
+  const typeLabel = isFamily ? "Family Membership" : "Single Membership";
+  const link = PAYMENT_LINKS[isFamily ? "family" : "single"];
+
+  async function submit() {
+    setError("");
+    if (!confirmed) {
+      setError("Please complete your payment in the PRJCT shop, then tick the box to confirm.");
+      return;
+    }
+    if (orderRef.trim().length < 4) {
+      setError("Enter the Order # shown on your PRJCT payment confirmation (e.g. AB12CD).");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiRequest("POST", "/api/registrations/payment", {
+        paymentToken: info.paymentToken,
+        paymentReference: orderRef.trim(),
+      });
+      onDone();
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : "";
+      let reason = "";
+      try {
+        reason = JSON.parse(raw.slice(raw.indexOf("{"))).message ?? "";
+      } catch {
+        reason = "";
+      }
+      setError(reason || "We couldn't save your Order #. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="space-y-5">
-      <StepHeading
-        title="Pay Your Membership Fee"
-        description="The last step. Memberships are paid for through the PRJCT Abu Dhabi online shop on behalf of ADIS."
-      />
+    <div className="min-h-dvh bg-background flex items-center justify-center px-4 py-12">
+      <Card className="max-w-lg w-full" data-testid="card-payment">
+        <CardContent className="p-6 sm:p-8 space-y-5">
+          <AdisLogo className="mx-auto h-12 w-auto" />
+          <div className="rounded-lg border border-border bg-accent/40 p-3 text-center text-sm text-foreground">
+            Your details have been saved — membership number <strong>{info.membershipNumber}</strong>.
+            <br />
+            One last step: pay your membership fee.
+          </div>
 
-      <div className="rounded-lg border border-border bg-accent/40 p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">{typeLabel}</span>
-          <span className="text-lg font-semibold font-serif text-primary" data-testid="text-payment-amount">
-            AED {amountDue}
-          </span>
-        </div>
-      </div>
-
-      <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground" data-testid="list-payment-steps">
-        <li>Click the button below to open the PRJCT Abu Dhabi shop.</li>
-        <li>
-          Select <strong>{typeLabel}</strong> (AED {amountDue}) and pay.
-        </li>
-        <li>Copy the <strong>Order #</strong> shown on your payment confirmation.</li>
-        <li>Come back to this page, tick the box, enter your Order # and click Complete my membership.</li>
-      </ol>
-
-      <div className="space-y-3">
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setOpened(true)}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-          data-testid="link-payment"
-        >
-          <CreditCard className="h-4 w-4" />
-          Open the PRJCT shop to pay
-          <ExternalLink className="h-3.5 w-3.5 opacity-80" />
-        </a>
-        <p className="text-xs text-muted-foreground">
-          Opens in a new tab. Card, Apple&nbsp;Pay, Google&nbsp;Pay and PayPal are accepted. Leave this
-          page open — you'll come back to it.
-        </p>
-      </div>
-
-      <div className="space-y-4 rounded-lg border border-border p-4">
-        <label
-          className="flex cursor-pointer items-start gap-3"
-          data-testid="label-payment-confirmed"
-        >
-          <Checkbox
-            checked={confirmed}
-            onCheckedChange={(v) =>
-              form.setValue("paymentConfirmed", Boolean(v), { shouldValidate: true })
-            }
-            data-testid="checkbox-payment-confirmed"
+          <StepHeading
+            title="Pay Your Membership Fee"
+            description="Memberships are paid for through the PRJCT Abu Dhabi online shop on behalf of ADIS."
           />
-          <span className="text-sm text-foreground">
-            I have paid AED {amountDue} through the PRJCT shop and my payment showed as complete
-          </span>
-        </label>
 
-        {form.formState.errors.paymentConfirmed && (
-          <p className="text-sm text-destructive" data-testid="error-payment-confirmed">
-            {form.formState.errors.paymentConfirmed.message}
-          </p>
-        )}
+          <div className="rounded-lg border border-border bg-accent/40 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{typeLabel}</span>
+              <span className="text-lg font-semibold font-serif text-primary" data-testid="text-payment-amount">
+                AED {info.amountDue}
+              </span>
+            </div>
+          </div>
 
-        <Field
-          label="Order # from your payment confirmation"
-          htmlFor="payment-reference"
-          error={form.formState.errors.paymentReference?.message}
-        >
-          <Input
-            id="payment-reference"
-            {...form.register("paymentReference")}
-            placeholder="e.g. AB12CD"
-            data-testid="input-payment-reference"
-          />
-        </Field>
-        <p className="text-xs text-muted-foreground">
-          After paying, PRJCT shows a "Payment complete" screen with an Order # — enter it here. The committee
-          checks every Order # against the payment account before your membership card is sent.
-        </p>
-      </div>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground" data-testid="list-payment-steps">
+            <li>Click the button below to open the PRJCT Abu Dhabi shop.</li>
+            <li>
+              Select <strong>{typeLabel}</strong> (AED {info.amountDue}) and pay.
+            </li>
+            <li>Copy the <strong>Order #</strong> shown on your payment confirmation.</li>
+            <li>Come back to this page, tick the box, enter your Order # and click Confirm my payment.</li>
+          </ol>
 
-      {opened && !confirmed && (
-        <p className="text-xs text-muted-foreground" data-testid="text-payment-hint">
-          Finished paying? Tick the box above, then click Complete my membership.
-        </p>
-      )}
+          <div className="space-y-3">
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpened(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              data-testid="link-payment"
+            >
+              <CreditCard className="h-4 w-4" />
+              Open the PRJCT shop to pay
+              <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+            </a>
+            <p className="text-xs text-muted-foreground">
+              Opens in a new tab. Leave this page open — you'll come back to it.
+            </p>
+          </div>
+
+          <div className="space-y-4 rounded-lg border border-border p-4">
+            <label className="flex cursor-pointer items-start gap-3" data-testid="label-payment-confirmed">
+              <Checkbox
+                checked={confirmed}
+                onCheckedChange={(v) => {
+                  setConfirmed(Boolean(v));
+                  setError("");
+                }}
+                data-testid="checkbox-payment-confirmed"
+              />
+              <span className="text-sm text-foreground">
+                I have paid AED {info.amountDue} through the PRJCT shop and my payment showed as complete
+              </span>
+            </label>
+
+            <Field label="Order # from your payment confirmation" htmlFor="payment-reference">
+              <Input
+                id="payment-reference"
+                value={orderRef}
+                onChange={(e) => {
+                  setOrderRef(e.target.value);
+                  setError("");
+                }}
+                placeholder="e.g. AB12CD"
+                data-testid="input-payment-reference"
+              />
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              After paying, PRJCT shows a "Payment complete" screen with an Order # — enter it here. The committee
+              checks every Order # against the payment account before your membership card is sent.
+            </p>
+          </div>
+
+          {error && (
+            <p className="text-sm text-destructive" data-testid="error-payment">
+              {error}
+            </p>
+          )}
+          {opened && !confirmed && !error && (
+            <p className="text-xs text-muted-foreground" data-testid="text-payment-hint">
+              Finished paying? Tick the box above, enter your Order #, then click Confirm my payment.
+            </p>
+          )}
+
+          <Button className="w-full" onClick={submit} disabled={saving} data-testid="button-confirm-payment">
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "CONFIRM MY PAYMENT"
+            )}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -844,7 +888,7 @@ function ReviewStep({
   const values = form.watch();
   return (
     <div className="space-y-6">
-      <StepHeading title="Review Your Details" description="Please check everything is correct before you pay." />
+      <StepHeading title="Review Your Details" description="Please check everything is correct before you submit your details." />
 
       <div className="rounded-lg border border-border p-4 text-sm">
         <dl className="grid gap-2 sm:grid-cols-2">
@@ -881,7 +925,7 @@ function ReviewStep({
 
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-        Everything look right? Continue to the last step to pay your membership fee and complete your membership.
+        Everything look right? Click Submit details and move on to payment. You will then pay your membership fee in the PRJCT Abu Dhabi shop.
       </p>
     </div>
   );

@@ -105,15 +105,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!parsed.data.consentTerms || !parsed.data.consentPrivacy) {
       return res.status(400).json({ message: "Required consents were not accepted" });
     }
-    if ((parsed.data.paymentReference ?? "").trim().length < 4) {
-      return res
-        .status(400)
-        .json({ message: "Please enter the Order # from your payment confirmation" });
-    }
-    // One payment, one membership: an Order # can only ever be used once. This
-    // also stops people re-using the receipt a single-use link shows after it
-    // has been paid.
-    if (await storage.isPaymentReferenceUsed(parsed.data.paymentReference ?? "")) {
+    // Details are submitted before payment now, so an Order # is optional here
+    // and is normally added afterwards via /api/registrations/payment.
+    // One payment, one membership: an Order # can only ever be used once.
+    const earlyRef = (parsed.data.paymentReference ?? "").trim();
+    if (earlyRef && (await storage.isPaymentReferenceUsed(earlyRef))) {
       return res.status(400).json({
         message:
           "This Order # has already been used for another membership. If you have just paid, please check the Order # on your payment confirmation or contact the ADIS committee.",
@@ -135,7 +131,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await sendWelcomeEmails(registration);
 
     const { cardToken, ...publicRegistration } = omitOtpSecret(registration);
-    res.status(201).json({ ...publicRegistration, cardEmailSent: false });
+    // paymentToken lets this browser attach the Order # after paying. It is
+    // the member's own card token; the card stays inactive until the
+    // committee confirms payment, so it grants nothing extra.
+    res.status(201).json({ ...publicRegistration, paymentToken: cardToken, cardEmailSent: false });
+  });
+
+  // Member returns from the PRJCT shop and enters their Order #.
+  app.post("/api/registrations/payment", registrationLimiter, async (req, res) => {
+    const token = typeof req.body?.paymentToken === "string" ? req.body.paymentToken : "";
+    const ref = typeof req.body?.paymentReference === "string" ? req.body.paymentReference.trim() : "";
+    if (!token) return res.status(400).json({ message: "Missing registration" });
+    if (ref.length < 4 || ref.length > 120) {
+      return res
+        .status(400)
+        .json({ message: "Enter the Order # shown on your PRJCT payment confirmation (e.g. AB12CD)" });
+    }
+    const found = await storage.findCardHolder(token);
+    if (!found || found.holder !== "primary") return res.status(404).json({ message: "Registration not found" });
+    const registration = found.registration;
+    if (registration.paymentStatus === "paid") {
+      return res.json({ ok: true, membershipNumber: registration.membershipNumber });
+    }
+    if (await storage.isPaymentReferenceUsed(ref, registration.id)) {
+      return res.status(400).json({
+        message:
+          "This Order # has already been used for another membership. Please check the Order # on your payment confirmation or contact the ADIS committee.",
+      });
+    }
+    await storage.declarePayment(registration.id, ref);
+    res.json({ ok: true, membershipNumber: registration.membershipNumber });
   });
 
   // Short, fragment-free links used in emails. Email clients often drop
@@ -257,47 +282,106 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Export registrations as CSV for the committee
   app.get("/api/registrations/export.csv", requireAdmin, async (_req, res) => {
     const registrations = await storage.listRegistrations();
+    // One pair of columns per child, as many as the largest family has.
+    const maxChildren = Math.max(1, ...registrations.map((r) => r.children.length));
+    const uaeDate = (iso?: string | null) => {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-GB", { timeZone: "Asia/Dubai" });
+    };
+    const dob = (v: string) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v ?? "");
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : v ?? "";
+    };
+    const yesNo = (v: boolean | null | undefined) => (v ? "Yes" : "No");
+    const statusLabel: Record<string, string> = {
+      pending: "No payment yet",
+      declared: "Paid - to verify",
+      paid: "Verified paid",
+      failed: "Failed",
+    };
     const headers = [
       "Membership Number",
-      "Primary Member Name",
-      "Second Adult Name",
-      "Email",
-      "Mobile",
-      "Number of Children",
       "Membership Type",
       "New / Renewal",
-      "Amount Paid",
+      "Primary Member Name",
+      "Primary Email",
+      "Primary Mobile",
+      "Nationality",
+      "Emirate",
+      "Second Adult First Name",
+      "Second Adult Surname",
+      "Second Adult Email",
+      "Second Adult Mobile",
+      "Number of Adults",
+      "Number of Children",
+      ...Array.from({ length: maxChildren }, (_, i) => [
+        `Child ${i + 1} First Name`,
+        `Child ${i + 1} Surname`,
+        `Child ${i + 1} Date of Birth`,
+      ]).flat(),
+      "Communication Preference",
+      "Join WhatsApp Community",
+      "Receive Marketing",
+      "Agreed Terms",
+      "Agreed Privacy",
+      "Membership Fee (AED)",
       "Payment Status",
-      "Payment Reference",
+      "Order # / Payment Reference",
+      "Payment Submitted",
       "Registration Date",
       "Membership Start Date",
       "Membership Expiry Date",
+      "Welcome Email Sent",
+      "Card Emailed (Primary)",
+      "Card Emailed (Second Adult)",
     ];
     const escape = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`;
-    const rows = registrations.map((r) =>
-      [
+    const rows = registrations.map((r) => {
+      const isFamily = r.membershipType === "family";
+      const kids = Array.from({ length: maxChildren }, (_, i) => {
+        const c = r.children[i];
+        return c ? [c.firstName, c.surname, dob(c.dob)] : ["", "", ""];
+      }).flat();
+      return [
         r.membershipNumber,
+        isFamily ? "Family" : "Single",
+        r.memberStatus === "renewal" ? "Renewal" : "New",
         r.primaryFullName,
-        r.secondAdultFirstName ? `${r.secondAdultFirstName} ${r.secondAdultSurname ?? ""}`.trim() : "",
         r.primaryEmail,
         r.primaryMobile,
+        r.nationality,
+        r.emirate,
+        r.secondAdultFirstName ?? "",
+        r.secondAdultSurname ?? "",
+        r.secondAdultEmail ?? "",
+        r.secondAdultMobile ?? "",
+        String(isFamily && r.secondAdultFirstName ? 2 : 1),
         String(r.children.length),
-        r.membershipType === "family" ? "Family" : "Single",
-        r.memberStatus === "renewal" ? "Renewal" : "New",
+        ...kids,
+        r.communicationPreference,
+        yesNo(r.joinWhatsappCommunity),
+        yesNo(r.receiveMarketing),
+        yesNo(r.consentTerms),
+        yesNo(r.consentPrivacy),
         String(r.amountDue),
-        r.paymentStatus,
+        statusLabel[r.paymentStatus] ?? r.paymentStatus,
         r.paymentReference ?? "",
-        r.registrationDate,
-        r.membershipStartDate,
-        r.membershipExpiryDate,
+        uaeDate(r.paymentDeclaredAt),
+        uaeDate(r.registrationDate),
+        uaeDate(r.membershipStartDate),
+        uaeDate(r.membershipExpiryDate),
+        uaeDate(r.welcomeEmailSentAt),
+        uaeDate(r.cardEmailSentAt),
+        uaeDate(r.partnerCardEmailSentAt),
       ]
         .map(escape)
-        .join(",")
-    );
+        .join(",");
+    });
     const csv = [headers.map(escape).join(","), ...rows].join("\r\n");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="adis-membership-export.csv"`);
-    res.send(csv);
+    res.send("\uFEFF" + csv);
   });
 
   // Get a single registration

@@ -146,13 +146,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // True if another registration already used this payment Order #.
-  async isPaymentReferenceUsed(ref: string): Promise<boolean> {
+  async isPaymentReferenceUsed(ref: string, exceptId?: number): Promise<boolean> {
     const rows = await getDb()
       .select({ id: registrations.id })
       .from(registrations)
       .where(sql`upper(trim(${registrations.paymentReference})) = ${ref.trim().toUpperCase()}`)
-      .limit(1);
-    return rows.length > 0;
+      .limit(2);
+    return rows.some((r) => r.id !== exceptId);
+  }
+
+  // Member has paid in the PRJCT shop after submitting their details.
+  async declarePayment(id: number, paymentReference: string): Promise<RegistrationWithChildren | undefined> {
+    const [row] = await getDb()
+      .update(registrations)
+      .set({ paymentStatus: "declared", paymentReference, paymentDeclaredAt: new Date().toISOString() })
+      .where(eq(registrations.id, id))
+      .returning();
+    return row ? toWithChildren(row) : undefined;
   }
 
   async deleteRegistration(id: number): Promise<boolean> {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Download, ArrowLeft, CheckCircle2, Clock, Users, LogOut, Lock } from "lucide-react";
+import { Download, ArrowLeft, CheckCircle2, Clock, Users, LogOut, Lock, Home, User, Baby } from "lucide-react";
 
 import { AdisLogo } from "@/components/adis-logo";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,8 @@ interface RegistrationRow {
   primaryMobile: string;
   secondAdultFirstName: string | null;
   secondAdultSurname: string | null;
+  secondAdultEmail: string | null;
+  secondAdultMobile: string | null;
   children: { firstName: string; surname: string; dob: string }[];
   memberStatus: "new" | "renewal";
   amountDue: number;
@@ -194,6 +196,13 @@ export default function Admin() {
   // dashboard by a committee member.
   const toVerifyCount = registrations.filter((r) => r.paymentStatus === "declared").length;
   const pendingCount = totalMembers - paidCount - toVerifyCount;
+  const familyCount = registrations.filter((r) => r.membershipType === "family").length;
+  const singleCount = registrations.filter((r) => r.membershipType === "single").length;
+  const adultCount = registrations.reduce(
+    (n, r) => n + (r.membershipType === "family" && r.secondAdultFirstName ? 2 : 1),
+    0,
+  );
+  const kidCount = registrations.reduce((n, r) => n + (r.children?.length ?? 0), 0);
 
   if (isCheckingSession) {
     return (
@@ -260,6 +269,10 @@ export default function Admin() {
           <StatCard icon={CheckCircle2} label="Verified paid" value={paidCount} testId="stat-paid" />
           <StatCard icon={Clock} label="Paid — to verify" value={toVerifyCount} testId="stat-to-verify" />
           <StatCard icon={Clock} label="No payment yet" value={pendingCount} testId="stat-pending" />
+          <StatCard icon={Home} label="Family memberships" value={familyCount} testId="stat-family" />
+          <StatCard icon={User} label="Single memberships" value={singleCount} testId="stat-single" />
+          <StatCard icon={Users} label="Total adults" value={adultCount} testId="stat-adults" />
+          <StatCard icon={Baby} label="Total kids" value={kidCount} testId="stat-kids" />
         </div>
 
         <Card>
@@ -285,7 +298,6 @@ export default function Admin() {
                       <TableHead>Contact</TableHead>
                       <TableHead>Children</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>New/Renewal</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Payment &amp; actions</TableHead>
                     </TableRow>
@@ -302,14 +314,41 @@ export default function Admin() {
                         <TableCell>{r.primaryFullName}</TableCell>
                         <TableCell>
                           {r.secondAdultFirstName ? `${r.secondAdultFirstName} ${r.secondAdultSurname ?? ""}` : "—"}
+                          {r.secondAdultEmail && (
+                            <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">
+                              {r.secondAdultEmail}
+                            </div>
+                          )}
+                          {r.secondAdultMobile && (
+                            <div className="whitespace-nowrap text-xs text-muted-foreground">{r.secondAdultMobile}</div>
+                          )}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           <div>{r.primaryEmail}</div>
                           <div>{r.primaryMobile}</div>
                         </TableCell>
-                        <TableCell>{r.children?.length ?? 0}</TableCell>
-                        <TableCell className="capitalize">{r.membershipType}</TableCell>
-                        <TableCell className="capitalize">{r.memberStatus}</TableCell>
+                        <TableCell>
+                          {(r.children?.length ?? 0) === 0 ? (
+                            "0"
+                          ) : (
+                            <div className="space-y-1 text-xs">
+                              {r.children.map((c, i) => (
+                                <div key={i} className="whitespace-nowrap">
+                                  <span className="text-foreground">
+                                    {c.firstName} {c.surname}
+                                  </span>
+                                  <div className="text-muted-foreground">
+                                    DOB {/^\d{4}-\d{2}-\d{2}/.test(c.dob) ? c.dob.slice(0, 10).split("-").reverse().join("/") : c.dob}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="capitalize">
+                          {r.membershipType}
+                          <div className="text-xs text-muted-foreground">{r.memberStatus}</div>
+                        </TableCell>
                         <TableCell>AED {r.amountDue}</TableCell>
                         <TableCell>
                           <Badge
