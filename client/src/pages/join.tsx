@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getApiBase } from "@/lib/queryClient";
 import {
   joinFormSchema,
   EMIRATES,
@@ -59,7 +59,7 @@ export default function Join() {
   const { toast } = useToast();
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState<SuccessInfo | null>(null);
+  const [success, setSuccess] = useState<SuccessInfo | null>(() => loadPendingPayment());
   const [paymentDone, setPaymentDone] = useState(false);
 
   const form = useForm<JoinFormValues>({
@@ -175,6 +175,16 @@ export default function Join() {
         cardEmailSent: Boolean(registration.cardEmailSent),
         paymentToken: registration.paymentToken,
       });
+      savePendingPayment({
+        membershipNumber: registration.membershipNumber,
+        primaryFullName: registration.primaryFullName,
+        membershipType: registration.membershipType,
+        amountDue: registration.amountDue,
+        registrationDate: registration.registrationDate,
+        membershipExpiryDate: registration.membershipExpiryDate,
+        cardEmailSent: false,
+        paymentToken: registration.paymentToken,
+      });
     } catch (err) {
       // Show the server's reason (e.g. an Order # already used) where it helps.
       const raw = err instanceof Error ? err.message : "";
@@ -195,7 +205,19 @@ export default function Join() {
   }
 
   if (success && !paymentDone) {
-    return <PaymentScreen info={success} onDone={() => setPaymentDone(true)} />;
+    return (
+      <PaymentScreen
+        info={success}
+        onDone={() => {
+          clearPendingPayment();
+          setPaymentDone(true);
+        }}
+        onStartOver={() => {
+          clearPendingPayment();
+          setSuccess(null);
+        }}
+      />
+    );
   }
   if (success) {
     return <SuccessScreen info={success} />;
@@ -402,7 +424,44 @@ function MembershipStep({ form }: { form: ReturnType<typeof useForm<JoinFormValu
 
 // Shown straight after the details are saved. The member pays in the PRJCT
 // shop, then enters the Order # so the committee can match the payment.
-function PaymentScreen({ info, onDone }: { info: SuccessInfo; onDone: () => void }) {
+const PENDING_KEY = "adis-pending-payment";
+
+function loadPendingPayment(): SuccessInfo | null {
+  try {
+    const raw = window.localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    return v && v.paymentToken && v.membershipNumber ? (v as SuccessInfo) : null;
+  } catch {
+    return null;
+  }
+}
+function savePendingPayment(info: SuccessInfo) {
+  try {
+    window.localStorage.setItem(PENDING_KEY, JSON.stringify(info));
+  } catch {
+    /* private browsing: fine, the page still works while open */
+  }
+}
+function clearPendingPayment() {
+  try {
+    window.localStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function PaymentScreen({
+  info,
+  onDone,
+  onStartOver,
+}: {
+  info: SuccessInfo;
+  onDone: () => void;
+  onStartOver: () => void;
+}) {
   const [opened, setOpened] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [orderRef, setOrderRef] = useState("");
@@ -418,26 +477,40 @@ function PaymentScreen({ info, onDone }: { info: SuccessInfo; onDone: () => void
       setError("Please complete your payment in the PRJCT shop, then tick the box to confirm.");
       return;
     }
-    if (orderRef.trim().length < 4) {
+    if (orderRef.toUpperCase().replace(/^\s*ORDER/, "").replace(/[^A-Z0-9]/g, "").length < 5) {
       setError("Enter the Order # shown on your PRJCT payment confirmation (e.g. AB12CD).");
       return;
     }
     setSaving(true);
     try {
-      await apiRequest("POST", "/api/registrations/payment", {
-        paymentToken: info.paymentToken,
-        paymentReference: orderRef.trim(),
-      });
-      onDone();
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : "";
-      let reason = "";
-      try {
-        reason = JSON.parse(raw.slice(raw.indexOf("{"))).message ?? "";
-      } catch {
-        reason = "";
+      // Retry quietly if the hosting service has a brief hiccup; only our own
+      // server's answers (with a "message") are shown to the member as-is.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        let res: Response | null = null;
+        try {
+          res = await fetch(`${getApiBase()}/api/registrations/payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paymentToken: info.paymentToken, paymentReference: orderRef.trim() }),
+          });
+        } catch {
+          res = null;
+        }
+        const body = res ? await res.json().catch(() => null) : null;
+        if (res?.ok && body?.ok) {
+          onDone();
+          return;
+        }
+        const ours = res && res.status < 500 && body?.message && body.message !== "Application not found";
+        if (ours) {
+          setError(body.message);
+          return;
+        }
+        if (attempt < 3) await sleep(2000);
       }
-      setError(reason || "We couldn't save your Order #. Please try again.");
+      setError(
+        `We couldn't reach the membership system just now. Your details are already saved (membership number ${info.membershipNumber}). Please wait a minute and press Confirm my payment again.`,
+      );
     } finally {
       setSaving(false);
     }
@@ -549,6 +622,12 @@ function PaymentScreen({ info, onDone }: { info: SuccessInfo; onDone: () => void
               "CONFIRM MY PAYMENT"
             )}
           </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Not {info.primaryFullName}?{" "}
+            <button type="button" className="underline" onClick={onStartOver} data-testid="button-start-over">
+              Start a new registration
+            </button>
+          </p>
         </CardContent>
       </Card>
     </div>

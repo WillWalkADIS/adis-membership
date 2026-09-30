@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "node:http";
 import rateLimit from "express-rate-limit";
-import { storage } from "./storage";
+import { storage, normaliseOrderRef } from "./storage";
 import { insertRegistrationSchema } from "@shared/schema";
 import { currentOtp, verifyOtp, OTP_PERIOD_SECONDS } from "./otp";
 import {
@@ -140,9 +140,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Member returns from the PRJCT shop and enters their Order #.
   app.post("/api/registrations/payment", registrationLimiter, async (req, res) => {
     const token = typeof req.body?.paymentToken === "string" ? req.body.paymentToken : "";
-    const ref = typeof req.body?.paymentReference === "string" ? req.body.paymentReference.trim() : "";
+    const rawRef = typeof req.body?.paymentReference === "string" ? req.body.paymentReference : "";
+    // Stored cleaned up ("#99j9z1" -> "99J9Z1") so the committee can match it.
+    const ref = normaliseOrderRef(rawRef);
     if (!token) return res.status(400).json({ message: "Missing registration" });
-    if (ref.length < 4 || ref.length > 120) {
+    if (ref.length < 5 || ref.length > 20) {
       return res
         .status(400)
         .json({ message: "Enter the Order # shown on your PRJCT payment confirmation (e.g. AB12CD)" });

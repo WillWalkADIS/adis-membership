@@ -147,11 +147,15 @@ export class DatabaseStorage implements IStorage {
 
   // True if another registration already used this payment Order #.
   async isPaymentReferenceUsed(ref: string, exceptId?: number): Promise<boolean> {
+    const key = normaliseOrderRef(ref);
+    if (!key) return false;
+    // Compare on letters and digits only, ignoring "Order", "#" and spaces.
     const rows = await getDb()
       .select({ id: registrations.id })
       .from(registrations)
-      .where(sql`upper(trim(${registrations.paymentReference})) = ${ref.trim().toUpperCase()}`)
-      .limit(2);
+      .where(
+        sql`regexp_replace(regexp_replace(upper(coalesce(${registrations.paymentReference}, '')), '^ *ORDER', ''), '[^A-Z0-9]', '', 'g') = ${key}`,
+      );
     return rows.some((r) => r.id !== exceptId);
   }
 
@@ -257,6 +261,11 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return row ? toWithChildren(row) : undefined;
   }
+}
+
+// "Order # 99j9z1" -> "99J9Z1"
+export function normaliseOrderRef(ref: string): string {
+  return (ref ?? "").toUpperCase().replace(/^\s*ORDER/, "").replace(/[^A-Z0-9]/g, "");
 }
 
 export const storage = new DatabaseStorage();
