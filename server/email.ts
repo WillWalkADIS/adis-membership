@@ -132,7 +132,7 @@ const LINKS = {
   volunteer: process.env.ADIS_VOLUNTEER_URL || "",
 };
 
-const PRESIDENT_NAME = process.env.ADIS_PRESIDENT_NAME || "Niamh Breen";
+const PRESIDENT_NAME = process.env.ADIS_PRESIDENT_NAME || "Mrs Niamh Breen";
 const PRESIDENT_EMAIL = process.env.ADIS_PRESIDENT_EMAIL || "president@adirishsociety.ae";
 
 
@@ -404,11 +404,13 @@ function buildMemberEmail(
     ``,
     `Become a volunteer: ${LINKS.volunteer || `mailto:${PRESIDENT_EMAIL}`}`,
     ``,
+    `GET IN TOUCH`,
+    `We'd love to hear from you. Please reach out to our President, ${PRESIDENT_NAME}: ${PRESIDENT_EMAIL}`,
+    ``,
     `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
     ``,
     `Míle buíochas,`,
-    `Mrs Niamh Breen`,
-    `President, Abu Dhabi Irish Society`,
+    `Abu Dhabi Irish Society Committee`,
   ].join("\n");
 
   const volunteerHref = LINKS.volunteer
@@ -464,13 +466,19 @@ function buildMemberEmail(
       wideButton(LINKS.mccaffertys, "ACTIVATE YOUR 20% McCAFFERTY'S DISCOUNT"),
       wideButton(volunteerHref, "BECOME A VOLUNTEER"),
 
-      `<div style="height:10px;"></div>`,
+      h2("Get in touch"),
+      p(`We'd love to hear from you. Please reach out to our President:`),
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
+        ${detailRow(
+          "President",
+          `${escapeHtml(PRESIDENT_NAME)} &nbsp;&nbsp; <a href="mailto:${PRESIDENT_EMAIL}" style="color:${GREEN};font-weight:700;">${PRESIDENT_EMAIL}</a>`,
+        )}
+      </table>`,
       p(
         `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
       ),
       `<p style="margin:18px 0 2px;font-size:16px;font-weight:700;color:${GREEN};">Míle buíochas,</p>`,
-      `<p style="margin:0;font-size:15px;font-weight:700;">Mrs Niamh Breen</p>`,
-      `<p style="margin:2px 0 0;font-size:14px;color:#555555;">President, Abu Dhabi Irish Society</p>`,
+      `<p style="margin:0;font-size:15px;font-weight:700;">Abu Dhabi Irish Society Committee</p>`,
     ].join(""),
   );
 
