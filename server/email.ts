@@ -407,7 +407,8 @@ function buildMemberEmail(
     `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
     ``,
     `Míle buíochas,`,
-    `Abu Dhabi Irish Society Committee`,
+    `Mrs Niamh Breen`,
+    `President, Abu Dhabi Irish Society`,
   ].join("\n");
 
   const volunteerHref = LINKS.volunteer
@@ -468,7 +469,8 @@ function buildMemberEmail(
         `We look forward to welcoming you to our upcoming events and to having you as part of our vibrant Irish community in Abu Dhabi.`,
       ),
       `<p style="margin:18px 0 2px;font-size:16px;font-weight:700;color:${GREEN};">Míle buíochas,</p>`,
-      `<p style="margin:0;font-size:15px;font-weight:700;">Abu Dhabi Irish Society Committee</p>`,
+      `<p style="margin:0;font-size:15px;font-weight:700;">Mrs Niamh Breen</p>`,
+      `<p style="margin:2px 0 0;font-size:14px;color:#555555;">President, Abu Dhabi Irish Society</p>`,
     ].join(""),
   );
 
