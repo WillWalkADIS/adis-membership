@@ -61,16 +61,18 @@ export function hashPassword(password: string, salt?: string): string {
   return `scrypt:${useSalt}:${derived}`;
 }
 
+function verifyScryptHash(password: string, stored: string): boolean {
+  const [scheme, salt, expected] = stored.split(":");
+  if (scheme !== "scrypt" || !salt || !expected) return false;
+  const actual = crypto.scryptSync(password, salt, 64).toString("hex");
+  // Constant-time comparison so response timing cannot leak the password.
+  const a = Buffer.from(actual, "hex");
+  const b = Buffer.from(expected, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export function verifyAdminPassword(password: string): boolean {
-  if (ADMIN_PASSWORD_HASH) {
-    const [scheme, salt, expected] = ADMIN_PASSWORD_HASH.split(":");
-    if (scheme !== "scrypt" || !salt || !expected) return false;
-    const actual = crypto.scryptSync(password, salt, 64).toString("hex");
-    // Constant-time comparison so response timing cannot leak the password.
-    const a = Buffer.from(actual, "hex");
-    const b = Buffer.from(expected, "hex");
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  }
+  if (ADMIN_PASSWORD_HASH) return verifyScryptHash(password, ADMIN_PASSWORD_HASH);
 
   if (ADMIN_PASSWORD_PLAIN && !isProduction) {
     const a = Buffer.from(password);
@@ -79,6 +81,50 @@ export function verifyAdminPassword(password: string): boolean {
   }
 
   return false;
+}
+
+// Additional committee logins, each with its own email and password and the
+// same full access as the main account. Only scrypt hashes are stored here —
+// the passwords themselves are long and random, so the hashes are safe to
+// keep in the repository. To change one of these passwords, run
+// `npm run hash-password -- "new password"` and replace the hash, or set
+// COMMITTEE_ACCOUNTS on Railway ("email=scrypt:...;email=scrypt:...") which
+// overrides the entry for any email it lists.
+const BUILT_IN_COMMITTEE_ACCOUNTS: Record<string, string> = {
+  // Ailise — ADIS Secretary
+  "secretary@adirishsociety.com":
+    "scrypt:c631259c31c59f50bec65178de146196:6d739154c1cd2d28ae79c614d62ff147ce7690f879da426ef5c13cb17c44cb9cd356900e8f2c549d0e7c21a0513ebd449839e73739638297c73940dc01316bc9",
+  // Mrs Niamh Breen — ADIS President
+  "president@adirishsociety.com":
+    "scrypt:2e8732cbf43ded6a474a92c76396507f:ce629a4269875ee90466b250cfd80ac9b7680b27a59fad0017d7400eb89e81dbcbb6ce0ba1ecadd62c2fd14c222c1a2ae3e9bd87d783166bb525fc639d2ced9a",
+};
+
+function loadCommitteeAccounts(): Record<string, string> {
+  const accounts: Record<string, string> = { ...BUILT_IN_COMMITTEE_ACCOUNTS };
+  for (const entry of (process.env.COMMITTEE_ACCOUNTS || "").split(";")) {
+    const i = entry.indexOf("=");
+    if (i <= 0) continue;
+    const email = entry.slice(0, i).trim().toLowerCase();
+    const hash = entry.slice(i + 1).trim();
+    if (email && hash) accounts[email] = hash;
+  }
+  return accounts;
+}
+
+const COMMITTEE_ACCOUNTS = loadCommitteeAccounts();
+
+// Checks an email + password pair against every committee login. Returns
+// true only for a known email with the matching password.
+export function verifyCommitteeLogin(email: string, password: string): boolean {
+  const normalised = email.trim().toLowerCase();
+  if (normalised === ADMIN_EMAIL) return verifyAdminPassword(password);
+  const stored = COMMITTEE_ACCOUNTS[normalised];
+  if (!stored) {
+    // Still do the hashing work so an unknown email takes as long as a known one.
+    verifyScryptHash(password, "scrypt:00:00");
+    return false;
+  }
+  return verifyScryptHash(password, stored);
 }
 
 // ---------------------------------------------------------------------------

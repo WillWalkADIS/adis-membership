@@ -10,7 +10,7 @@ import {
   emailTransport,
 } from "./email";
 import { runReminderSweep } from "./reminders";
-import { ADMIN_EMAIL, verifyAdminPassword, cardUrlFor } from "./config";
+import { verifyCommitteeLogin, cardUrlFor } from "./config";
 
 // Membership cards are only ever emailed once a committee member has marked
 // the registration as paid in the dashboard. Ticking "I have paid" on the form
@@ -73,7 +73,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/login", loginLimiter, (req, res) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
-    if (email !== ADMIN_EMAIL || !verifyAdminPassword(password)) {
+    if (!email || !verifyCommitteeLogin(email, password)) {
       return res.status(401).json({ message: "Incorrect email or password" });
     }
     req.session.isAdmin = true;
