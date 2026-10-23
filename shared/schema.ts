@@ -113,4 +113,39 @@ export interface RegistrationWithChildren extends Omit<Registration, "childrenJs
   children: { firstName: string; surname: string; dob: string }[];
 }
 
+// Fields the committee can correct from the admin dashboard after a member
+// has submitted the form. Payment, membership number, dates and card keys are
+// deliberately not editable here.
+const optionalText = z.string().trim().max(200).optional().nullable();
+export const adminUpdateDetailsSchema = z
+  .object({
+    primaryFullName: z.string().trim().min(2).max(200),
+    primaryEmail: z.string().trim().toLowerCase().email().max(200),
+    primaryMobile: z.string().trim().min(7).max(40),
+    nationality: z.string().trim().min(2).max(100),
+    emirate: z.string().trim().min(1).max(100),
+    communicationPreference: z.enum(["email", "whatsapp", "both"]),
+    secondAdultFirstName: optionalText,
+    secondAdultSurname: optionalText,
+    secondAdultEmail: z
+      .union([z.literal(""), z.string().trim().toLowerCase().email().max(200)])
+      .optional()
+      .nullable(),
+    secondAdultMobile: optionalText,
+    children: z
+      .array(
+        z.object({
+          firstName: z.string().trim().min(1).max(100),
+          surname: z.string().trim().min(1).max(100),
+          dob: z.string().trim().min(1).max(40),
+        }),
+      )
+      .max(20),
+    // Re-send the digital card(s) after saving, e.g. to a corrected email.
+    resendCard: z.boolean().optional(),
+  })
+  .strict();
+
+export type AdminUpdateDetails = z.infer<typeof adminUpdateDetailsSchema>;
+
 export type ReminderKind = "reminder30" | "reminder7" | "reminderExpiry";

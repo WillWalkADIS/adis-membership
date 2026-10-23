@@ -4,6 +4,7 @@ import type {
   InsertRegistration,
   RegistrationWithChildren,
   ReminderKind,
+  AdminUpdateDetails,
 } from "@shared/schema";
 import { desc, eq, sql, and, or, isNull, gte, lte, lt } from "drizzle-orm";
 import { getDb } from "./db";
@@ -164,6 +165,29 @@ export class DatabaseStorage implements IStorage {
     const [row] = await getDb()
       .update(registrations)
       .set({ paymentStatus: "declared", paymentReference, paymentDeclaredAt: new Date().toISOString() })
+      .where(eq(registrations.id, id))
+      .returning();
+    return row ? toWithChildren(row) : undefined;
+  }
+
+  // Committee correction of a member's submitted details. Blank optional
+  // fields are stored as null so they disappear cleanly from the dashboard.
+  async updateDetails(
+    id: number,
+    details: Omit<AdminUpdateDetails, "resendCard">,
+  ): Promise<RegistrationWithChildren | undefined> {
+    const blankToNull = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
+    const { children, ...fields } = details;
+    const [row] = await getDb()
+      .update(registrations)
+      .set({
+        ...fields,
+        secondAdultFirstName: blankToNull(fields.secondAdultFirstName),
+        secondAdultSurname: blankToNull(fields.secondAdultSurname),
+        secondAdultEmail: blankToNull(fields.secondAdultEmail),
+        secondAdultMobile: blankToNull(fields.secondAdultMobile),
+        childrenJson: JSON.stringify(children ?? []),
+      })
       .where(eq(registrations.id, id))
       .returning();
     return row ? toWithChildren(row) : undefined;

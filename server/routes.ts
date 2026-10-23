@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "node:http";
 import rateLimit from "express-rate-limit";
 import { storage, normaliseOrderRef } from "./storage";
-import { insertRegistrationSchema } from "@shared/schema";
+import { insertRegistrationSchema, adminUpdateDetailsSchema } from "@shared/schema";
 import { currentOtp, verifyOtp, OTP_PERIOD_SECONDS } from "./otp";
 import {
   sendMembershipCardEmail,
@@ -265,6 +265,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { primarySent, partnerSent } = await issueCards(registration.id, { force: true });
     if (!primarySent) return res.status(502).json({ message: "The email could not be sent. Please try again." });
     res.json({ ok: true, partnerSent });
+  });
+
+  // Admin: correct a member's details (typos, wrong email, missing child...).
+  // Their card page and door check show the new details straight away; the
+  // card can optionally be re-sent, e.g. when the email address was wrong.
+  app.patch("/api/registrations/:id/details", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const parsed = adminUpdateDetailsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Some details are missing or invalid.",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+    }
+    const existing = await storage.getRegistration(id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    const { resendCard, ...details } = parsed.data;
+    if (
+      existing.membershipType === "family" &&
+      (!details.secondAdultFirstName || !details.secondAdultSurname || !details.secondAdultEmail)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "A family membership needs the second adult's first name, surname and email." });
+    }
+    const updated = await storage.updateDetails(id, details);
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    console.log(`Member ${updated.membershipNumber} details edited by ${req.session.adminEmail}`);
+
+    let cardResent = false;
+    if (resendCard && updated.paymentStatus === "paid") {
+      const { primarySent } = await issueCards(updated.id, { force: true });
+      cardResent = primarySent;
+    }
+    res.json({ registration: omitOtpSecret(updated), cardResent });
   });
 
   // Admin: permanently remove a registration (tests, duplicates). Its card

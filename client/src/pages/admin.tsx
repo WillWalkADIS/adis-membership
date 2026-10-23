@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Download, ArrowLeft, CheckCircle2, Clock, Users, LogOut, Lock, Home, User, Baby } from "lucide-react";
+import { Download, ArrowLeft, CheckCircle2, Clock, Users, LogOut, Lock, Home, User, Baby, Pencil } from "lucide-react";
 
 import { AdisLogo } from "@/components/adis-logo";
+import { EditMemberDialog, type EditableMember } from "@/components/edit-member-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -105,6 +106,9 @@ interface RegistrationRow {
   primaryFullName: string;
   primaryEmail: string;
   primaryMobile: string;
+  nationality: string;
+  emirate: string;
+  communicationPreference: "email" | "whatsapp" | "both";
   secondAdultFirstName: string | null;
   secondAdultSurname: string | null;
   secondAdultEmail: string | null;
@@ -120,6 +124,7 @@ interface RegistrationRow {
 
 export default function Admin() {
   const { toast } = useToast();
+  const [editing, setEditing] = useState<EditableMember | null>(null);
 
   const { data: session, isLoading: isCheckingSession } = useQuery<{ email: string } | null>({
     queryKey: ["/api/admin/me"],
@@ -363,6 +368,15 @@ export default function Admin() {
                             </div>
                           ) : null}
                           <div className="mt-2 flex flex-col items-start gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditing(r)}
+                              data-testid={`button-edit-${r.id}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                              Edit details
+                            </Button>
                             {r.paymentStatus !== "paid" && (
                               <Button
                                 size="sm"
@@ -426,9 +440,10 @@ export default function Admin() {
           "Paid — to verify" means the member ticked that they paid through the payment link. Check it against
           the PRJCT Abu Dhabi payment dashboard, then click "Confirm paid & send card". Membership cards are only
           ever emailed at that moment — to both adults on a Family membership. Use "Mark paid & send card" for cash
-          or bank transfers.
+          or bank transfers. Use "Edit details" to correct anything a member entered wrongly.
         </p>
       </main>
+      <EditMemberDialog member={editing} onClose={() => setEditing(null)} />
     </div>
   );
 }
